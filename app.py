@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 from plotly.subplots import make_subplots
 import dash
 from dash import dcc, html, Input, Output, State
@@ -16,7 +15,7 @@ warnings.filterwarnings('ignore')
 
 # ========== DEBUG INFO ==========
 print("=" * 80)
-print("🚀 CUSTOMER INTELLIGENCE DASHBOARD - FIXED VERSION")
+print("🚀 CUSTOMER INTELLIGENCE DASHBOARD - FIXED CASE SENSITIVITY")
 print("=" * 80)
 print(f"Python: {sys.version}")
 print(f"Current dir: {os.getcwd()}")
@@ -25,12 +24,12 @@ print(f"Files: {os.listdir('.')}")
 # ========== FLASK SERVER ==========
 server = Flask(__name__)
 
-# ========== LOAD DATA ==========
+# ========== LOAD DATA (FIXED CASE SENSITIVITY) ==========
 def load_data():
-    """Load data with robust error handling"""
+    """Load data with robust error handling - FIXED for case sensitivity"""
     try:
         # Cek file CSV yang mungkin ada
-        csv_files = ['final_customer_segments (1).csv', 'final_customer_segments.csv', 'final_customer_segments.xlsx']
+        csv_files = ['final_customer_segments (1).csv', 'final_customer_segments.csv']
         
         for csv_file in csv_files:
             if os.path.exists(csv_file):
@@ -38,85 +37,118 @@ def load_data():
                 print(f"   Size: {os.path.getsize(csv_file):,} bytes")
                 
                 try:
-                    if csv_file.endswith('.csv'):
-                        # Coba baca CSV
-                        df = pd.read_csv(csv_file)
-                    elif csv_file.endswith('.xlsx'):
-                        # Coba baca Excel
-                        df = pd.read_excel(csv_file)
-                    
+                    # Coba baca CSV
+                    df = pd.read_csv(csv_file)
                     print(f"✅ Data loaded successfully: {df.shape}")
-                    print(f"   Columns: {df.columns.tolist()}")
+                    print(f"   Original columns: {df.columns.tolist()}")
                     
-                    # Reset index untuk menghindari error
-                    df = df.reset_index(drop=True)
+                    # LOWER CASE SEMUA NAMA KOLOM untuk konsistensi
+                    df.columns = [col.strip().lower().replace(' ', '_') for col in df.columns]
+                    print(f"   Standardized columns: {df.columns.tolist()}")
                     
-                    # Bersihkan nama kolom (hapus spasi, lowercase)
-                    df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
+                    # HAPUS DUPLIKAT KOLOM (jika ada)
+                    df = df.loc[:, ~df.columns.duplicated()]
                     
-                    # Cek dan buat kolom yang diperlukan
-                    # 1. Recency
-                    if 'recency' not in df.columns:
-                        # Cari kolom yang mungkin berisi recency
-                        recency_candidates = [col for col in df.columns if 'recency' in col.lower() or 'days' in col.lower()]
-                        if recency_candidates:
-                            df['recency'] = df[recency_candidates[0]].astype(float)
-                        else:
-                            df['recency'] = np.random.randint(1, 365, len(df))
+                    # CEK KOLOM YANG DIPERLUKAN - CASE INSENSITIVE
+                    # Buat mapping untuk nama kolom yang berbeda
+                    column_mapping = {}
                     
-                    # 2. Frequency
-                    if 'frequency' not in df.columns:
-                        freq_candidates = [col for col in df.columns if 'frequency' in col.lower() or 'count' in col.lower()]
-                        if freq_candidates:
-                            df['frequency'] = df[freq_candidates[0]].astype(float)
-                        else:
-                            df['frequency'] = np.random.randint(1, 100, len(df))
+                    # Cari kolom recency
+                    recency_candidates = ['recency', 'days_since_last_purchase', 'r_value']
+                    for candidate in recency_candidates:
+                        if candidate in df.columns:
+                            column_mapping['recency'] = candidate
+                            break
                     
-                    # 3. Monetary
-                    if 'monetary' not in df.columns:
-                        monetary_candidates = [col for col in df.columns if 'monetary' in col.lower() or 'revenue' in col.lower() or 'spend' in col.lower()]
-                        if monetary_candidates:
-                            df['monetary'] = pd.to_numeric(df[monetary_candidates[0]], errors='coerce')
-                        else:
-                            df['monetary'] = np.random.randint(100, 20000, len(df))
+                    # Cari kolom frequency
+                    freq_candidates = ['frequency', 'transaction_count', 'f_value', 'total_transactions']
+                    for candidate in freq_candidates:
+                        if candidate in df.columns:
+                            column_mapping['frequency'] = candidate
+                            break
                     
-                    # 4. Cluster
-                    if 'cluster_kmeans' not in df.columns:
-                        cluster_candidates = [col for col in df.columns if 'cluster' in col.lower()]
-                        if cluster_candidates:
-                            df['cluster_kmeans'] = df[cluster_candidates[0]].astype(str).str.extract('(\d+)').astype(float).fillna(0).astype(int)
-                        else:
-                            df['cluster_kmeans'] = np.random.choice([0, 1, 2, 3, 4, 5, 6], len(df))
+                    # Cari kolom monetary
+                    monetary_candidates = ['monetary', 'total_revenue', 'm_value', 'revenue', 'total_spent']
+                    for candidate in monetary_candidates:
+                        if candidate in df.columns:
+                            column_mapping['monetary'] = candidate
+                            break
                     
-                    # 5. RFM Score
-                    if 'rfm_score' not in df.columns:
-                        rfm_candidates = [col for col in df.columns if 'score' in col.lower()]
-                        if rfm_candidates:
-                            df['rfm_score'] = pd.to_numeric(df[rfm_candidates[0]], errors='coerce')
-                        else:
-                            # Buat RFM Score dari data yang ada
-                            df['rfm_score'] = (pd.qcut(df['recency'], 5, labels=[5,4,3,2,1]).astype(int) +
-                                              pd.qcut(df['frequency'], 5, labels=[1,2,3,4,5]).astype(int) +
-                                              pd.qcut(df['monetary'], 5, labels=[1,2,3,4,5]).astype(int))
+                    # Cari kolom cluster
+                    cluster_candidates = ['cluster_kmeans', 'cluster', 'segment', 'customer_segment', 'kmeans_cluster']
+                    for candidate in cluster_candidates:
+                        if candidate in df.columns:
+                            column_mapping['cluster_kmeans'] = candidate
+                            break
                     
-                    # 6. Average Order Value
-                    if 'avgordervalue' not in df.columns and 'average_order_value' not in df.columns:
+                    # Cari kolom RFM score
+                    rfm_candidates = ['rfm_score', 'rfm_value', 'total_score']
+                    for candidate in rfm_candidates:
+                        if candidate in df.columns:
+                            column_mapping['rfm_score'] = candidate
+                            break
+                    
+                    # Cari kolom average order value
+                    aov_candidates = ['avgordervalue', 'average_order_value', 'aov', 'avg_transaction_value']
+                    for candidate in aov_candidates:
+                        if candidate in df.columns:
+                            column_mapping['avgordervalue'] = candidate
+                            break
+                    
+                    print(f"✅ Column mapping found: {column_mapping}")
+                    
+                    # STANDARDISASI NAMA KOLOM
+                    for standard_name, original_name in column_mapping.items():
+                        if original_name != standard_name and original_name in df.columns:
+                            df[standard_name] = df[original_name]
+                    
+                    # PASTIKAN SEMUA KOLOM STANDAR ADA
+                    standard_columns = ['recency', 'frequency', 'monetary', 'cluster_kmeans', 'rfm_score', 'avgordervalue']
+                    
+                    for col in standard_columns:
+                        if col not in df.columns:
+                            print(f"⚠️ Column '{col}' not found, creating with dummy data")
+                            if col == 'recency':
+                                df[col] = np.random.randint(1, 365, len(df))
+                            elif col == 'frequency':
+                                df[col] = np.random.randint(1, 100, len(df))
+                            elif col == 'monetary':
+                                df[col] = np.random.randint(100, 20000, len(df))
+                            elif col == 'cluster_kmeans':
+                                df[col] = np.random.choice([0, 1, 2, 3, 4, 5, 6], len(df))
+                            elif col == 'rfm_score':
+                                df[col] = np.random.randint(1, 10, len(df))
+                            elif col == 'avgordervalue':
+                                df[col] = df['monetary'] / df['frequency'].clip(lower=1)
+                    
+                    # Konversi tipe data
+                    df['recency'] = pd.to_numeric(df['recency'], errors='coerce').fillna(df['recency'].median())
+                    df['frequency'] = pd.to_numeric(df['frequency'], errors='coerce').fillna(df['frequency'].median())
+                    df['monetary'] = pd.to_numeric(df['monetary'], errors='coerce').fillna(df['monetary'].median())
+                    df['cluster_kmeans'] = pd.to_numeric(df['cluster_kmeans'], errors='coerce').fillna(0).astype(int)
+                    df['rfm_score'] = pd.to_numeric(df['rfm_score'], errors='coerce').fillna(df['rfm_score'].median())
+                    
+                    # Bersihkan nilai negatif
+                    df['recency'] = df['recency'].abs()
+                    df['frequency'] = df['frequency'].abs()
+                    df['monetary'] = df['monetary'].abs()
+                    
+                    # Pastikan avgordervalue ada
+                    if 'avgordervalue' not in df.columns:
                         df['avgordervalue'] = df['monetary'] / df['frequency'].clip(lower=1)
                     
-                    # Bersihkan data NaN
-                    for col in ['recency', 'frequency', 'monetary', 'rfm_score', 'avgordervalue', 'cluster_kmeans']:
-                        if col in df.columns:
-                            df[col] = df[col].fillna(df[col].median() if df[col].dtype != 'object' else 0)
-                    
                     print(f"✅ Processed {len(df)} rows")
+                    print(f"   Final columns: {df.columns.tolist()}")
                     print(f"   Recency range: {df['recency'].min():.0f} - {df['recency'].max():.0f}")
                     print(f"   Frequency range: {df['frequency'].min():.0f} - {df['frequency'].max():.0f}")
                     print(f"   Monetary range: £{df['monetary'].min():.0f} - £{df['monetary'].max():.0f}")
+                    print(f"   Cluster values: {df['cluster_kmeans'].unique()}")
                     
                     return df
                         
                 except Exception as e:
                     print(f"❌ Error reading {csv_file}: {e}")
+                    traceback.print_exc()
                     continue
                     
         print("📂 No valid data file found, using enhanced dummy data")
@@ -135,64 +167,61 @@ def create_enhanced_data():
     
     print(f"📊 Creating enhanced data with {n} customers")
     
-    # Buat data dasar yang realistis
-    clusters = []
-    recencies = []
-    frequencies = []
-    monetaries = []
-    
-    # Distribusi untuk setiap cluster
-    cluster_dist = {
-        0: {'name': 'Dormant', 'recency': (200, 365), 'frequency': (1, 5), 'monetary': (50, 500), 'weight': 0.15},
-        1: {'name': 'Champions', 'recency': (1, 30), 'frequency': (15, 50), 'monetary': (5000, 30000), 'weight': 0.20},
-        2: {'name': 'Loyal', 'recency': (1, 60), 'frequency': (5, 20), 'monetary': (500, 2000), 'weight': 0.15},
-        3: {'name': 'Big Spenders', 'recency': (10, 90), 'frequency': (1, 10), 'monetary': (10000, 50000), 'weight': 0.10},
-        4: {'name': 'At Risk', 'recency': (90, 180), 'frequency': (2, 10), 'monetary': (300, 1500), 'weight': 0.15},
-        5: {'name': 'Potential', 'recency': (1, 60), 'frequency': (1, 5), 'monetary': (100, 800), 'weight': 0.10},
-        6: {'name': 'Needs Attention', 'recency': (60, 120), 'frequency': (3, 15), 'monetary': (200, 1000), 'weight': 0.15}
-    }
-    
-    for cluster_id, params in cluster_dist.items():
-        n_cluster = int(n * params['weight'])
-        clusters.extend([cluster_id] * n_cluster)
-        recencies.extend(np.random.randint(params['recency'][0], params['recency'][1], n_cluster))
-        frequencies.extend(np.random.randint(params['frequency'][0], params['frequency'][1], n_cluster))
-        monetaries.extend(np.random.randint(params['monetary'][0], params['monetary'][1], n_cluster))
-    
-    # Buat DataFrame
+    # Create base data with lowercase column names
     data = {
-        'Recency': recencies,
-        'Frequency': frequencies,
-        'Monetary': monetaries,
-        'Cluster_KMeans': clusters
+        'recency': np.random.randint(1, 365, n),
+        'frequency': np.random.randint(1, 50, n),
+        'monetary': np.random.randint(100, 10000, n),
+        'avgordervalue': np.random.randint(50, 500, n),
+        'rfm_score': np.random.randint(1, 10, n),
+        'cluster_kmeans': np.random.choice([0, 1, 2, 3, 4, 5, 6], n, p=[0.15, 0.2, 0.15, 0.1, 0.15, 0.1, 0.15])
     }
+    
+    # Enhance for specific clusters
+    # Cluster 1: Champions
+    mask = data['cluster_kmeans'] == 1
+    data['recency'] = np.where(mask, np.random.randint(1, 30, n), data['recency'])
+    data['frequency'] = np.where(mask, np.random.randint(15, 50, n), data['frequency'])
+    data['monetary'] = np.where(mask, np.random.randint(5000, 30000, n), data['monetary'])
+    
+    # Cluster 3: Big Spenders
+    mask = data['cluster_kmeans'] == 3
+    data['monetary'] = np.where(mask, np.random.randint(10000, 50000, n), data['monetary'])
+    data['avgordervalue'] = np.where(mask, np.random.randint(1000, 5000, n), data['avgordervalue'])
+    
+    # Cluster 6: High Frequency
+    mask = data['cluster_kmeans'] == 6
+    data['frequency'] = np.where(mask, np.random.randint(30, 100, n), data['frequency'])
+    
+    # Cluster 0: Dormant
+    mask = data['cluster_kmeans'] == 0
+    data['recency'] = np.where(mask, np.random.randint(200, 365, n), data['recency'])
+    data['frequency'] = np.where(mask, np.random.randint(1, 5, n), data['frequency'])
     
     rfm = pd.DataFrame(data)
-    
-    # Hitung derived metrics
-    rfm['AvgOrderValue'] = rfm['Monetary'] / rfm['Frequency'].clip(lower=1)
-    
-    # Buat RFM Score (1-10)
-    rfm['R_Score'] = pd.qcut(rfm['Recency'], 5, labels=[5,4,3,2,1], duplicates='drop').astype(int)
-    rfm['F_Score'] = pd.qcut(rfm['Frequency'], 5, labels=[1,2,3,4,5], duplicates='drop').astype(int)
-    rfm['M_Score'] = pd.qcut(rfm['Monetary'], 5, labels=[1,2,3,4,5], duplicates='drop').astype(int)
-    rfm['RFM_Score'] = rfm['R_Score'] + rfm['F_Score'] + rfm['M_Score']
-    
     print(f"✅ Enhanced data created: {rfm.shape}")
-    print(f"   Cluster distribution: {rfm['Cluster_KMeans'].value_counts().to_dict()}")
-    
     return rfm
 
 # Load data
 rfm = load_data()
+
+# PASTIKAN KOLOM YANG DIPERLUKAN ADA (LOWERCASE!)
+required_columns = ['recency', 'frequency', 'monetary', 'cluster_kmeans', 'rfm_score', 'avgordervalue']
+for col in required_columns:
+    if col not in rfm.columns:
+        print(f"❌ CRITICAL: Column '{col}' missing from data!")
+        print(f"   Available columns: {rfm.columns.tolist()}")
+        # Exit jika kolom penting tidak ada
+        sys.exit(1)
+
 print(f"\n📊 DATA SUMMARY:")
 print(f"   Total customers: {len(rfm):,}")
-print(f"   Unique clusters: {rfm['Cluster_KMeans'].nunique()}")
-print(f"   Total revenue: £{rfm['Monetary'].sum():,.0f}")
-print(f"   Average order value: £{rfm['AvgOrderValue'].mean():.0f}")
-print(f"   Recency stats: mean={rfm['Recency'].mean():.1f}, std={rfm['Recency'].std():.1f}")
-print(f"   Frequency stats: mean={rfm['Frequency'].mean():.1f}, std={rfm['Frequency'].std():.1f}")
-print(f"   Monetary stats: mean={rfm['Monetary'].mean():.1f}, std={rfm['Monetary'].std():.1f}")
+print(f"   Unique clusters: {rfm['cluster_kmeans'].nunique()}")
+print(f"   Total revenue: £{rfm['monetary'].sum():,.0f}")
+print(f"   Average order value: £{rfm['avgordervalue'].mean():.0f}")
+print(f"   Recency stats: mean={rfm['recency'].mean():.1f}, std={rfm['recency'].std():.1f}")
+print(f"   Frequency stats: mean={rfm['frequency'].mean():.1f}, std={rfm['frequency'].std():.1f}")
+print(f"   Monetary stats: mean={rfm['monetary'].mean():.1f}, std={rfm['monetary'].std():.1f}")
 
 # ========== CLUSTER STRATEGIES ==========
 strats = {
@@ -214,13 +243,13 @@ champion_details = {
 
 def get_strat(cid, data):
     """Get strategy for cluster"""
-    cd = data[data['Cluster_KMeans'] == cid]
+    cd = data[data['cluster_kmeans'] == cid]
     if len(cd) == 0:
         return {**strats['standard'], 'cluster_id': cid}
     
-    r = cd['Recency'].mean()
-    f = cd['Frequency'].mean()
-    m = cd['Monetary'].mean()
+    r = cd['recency'].mean()
+    f = cd['frequency'].mean()
+    m = cd['monetary'].mean()
     
     if r < 50 and f > 10 and m > 1000:
         s = 'champions'
@@ -239,13 +268,13 @@ def get_strat(cid, data):
 
 # Create profiles
 profs = {}
-for c in sorted(rfm['Cluster_KMeans'].unique()):
+for c in sorted(rfm['cluster_kmeans'].unique()):
     p = get_strat(c, rfm)
     profs[c] = p
     
     # Add cluster labels and priority
-    rfm.loc[rfm['Cluster_KMeans'] == c, 'Cluster_Label'] = f"{p['name'][:2]} {p['name'][2:]} (C{c})"
-    rfm.loc[rfm['Cluster_KMeans'] == c, 'Priority'] = p['priority']
+    rfm.loc[rfm['cluster_kmeans'] == c, 'cluster_label'] = f"{p['name'][:2]} {p['name'][2:]} (C{c})"
+    rfm.loc[rfm['cluster_kmeans'] == c, 'priority'] = p['priority']
 
 # Create color mapping
 colors = {}
@@ -255,8 +284,8 @@ for c, p in profs.items():
 
 print(f"\n🎯 CLUSTER PROFILES CREATED:")
 for c, p in profs.items():
-    count = len(rfm[rfm['Cluster_KMeans'] == c])
-    revenue = rfm[rfm['Cluster_KMeans'] == c]['Monetary'].sum()
+    count = len(rfm[rfm['cluster_kmeans'] == c])
+    revenue = rfm[rfm['cluster_kmeans'] == c]['monetary'].sum()
     print(f"   • {p['name']} (C{c}): {count:,} customers - £{revenue:,.0f} revenue - {p['priority']}")
 
 # ========== DASH APP ==========
@@ -268,300 +297,6 @@ app = dash.Dash(
     update_title=None
 )
 
-# ========== CUSTOM HTML TEMPLATE ==========
-app.index_string = '''<!DOCTYPE html>
-<html>
-    <head>
-        {%metas%}
-        <title>Customer Intelligence Dashboard</title>
-        {%css%}
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        <style>
-            *{margin:0;padding:0;box-sizing:border-box}
-            body{font-family:'Inter','Poppins',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f093fb 100%);padding:16px;min-height:100vh}
-            .dash{background:rgba(255,255,255,0.98);border-radius:32px;padding:40px;box-shadow:0 40px 100px rgba(0,0,0,0.4);animation:fadeIn .8s ease-out}
-            @keyframes fadeIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
-            
-            /* HEADER */
-            .hdr{text-align:center;padding:28px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:24px;margin-bottom:36px;position:relative;overflow:hidden;box-shadow:0 15px 40px rgba(102,126,234,0.35)}
-            .hdr::before{content:'';position:absolute;top:-50%;right:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,255,255,.15),transparent 60%);animation:pulse 4s ease-in-out infinite}
-            @keyframes pulse{0%,100%{transform:scale(1) rotate(0deg)}50%{transform:scale(1.15) rotate(5deg)}}
-            .title{font-size:3.8rem;font-weight:900;color:#fff;text-shadow:4px 4px 8px rgba(0,0,0,.35);margin:0;letter-spacing:-1.5px;line-height:1.1}
-            .sub{color:rgba(255,255,255,.95);font-size:1.35rem;margin-top:10px;font-weight:500;letter-spacing:0.5px}
-            
-            /* METRICS */
-            .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;margin-bottom:36px}
-            .met{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:22px;padding:32px 28px;text-align:center;color:#fff;box-shadow:0 15px 40px rgba(102,126,234,.45);transition:all .4s cubic-bezier(0.4,0,0.2,1);position:relative;overflow:hidden}
-            .met::before{content:'';position:absolute;top:-100%;left:-100%;width:300%;height:300%;background:radial-gradient(circle,rgba(255,255,255,.2),transparent 65%);transition:.7s ease}
-            .met:hover{transform:translateY(-14px) scale(1.05);box-shadow:0 25px 60px rgba(102,126,234,.65)}
-            .met:hover::before{top:0;left:0}
-            .met-icon{font-size:3.5rem;margin-bottom:14px;animation:float 3.5s ease-in-out infinite;filter:drop-shadow(2px 2px 4px rgba(0,0,0,0.2))}
-            @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-            .met-val{font-size:3.2rem;font-weight:900;margin:12px 0;text-shadow:3px 3px 6px rgba(0,0,0,.25);letter-spacing:-1px}
-            .met-lbl{font-size:1rem;text-transform:uppercase;letter-spacing:2.5px;font-weight:700;margin-bottom:6px}
-            .met-sub{font-size:.88rem;margin-top:8px;opacity:.9;font-weight:500}
-            
-            /* FILTERS */
-            .filt{background:linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%);border-radius:22px;padding:32px;margin-bottom:32px;box-shadow:0 10px 30px rgba(0,0,0,.12)}
-            .filt-t{font-size:1.6rem;font-weight:800;color:#2c3e50;margin-bottom:22px;display:flex;align-items:center;gap:12px}
-            .filt-g{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-            .filt-g label{display:block;font-weight:700;color:#34495e;margin-bottom:8px;font-size:1rem;letter-spacing:0.3px}
-            .Select-control,.rc-slider{border-radius:12px !important}
-            
-            /* TABS */
-            .tab-content{padding:28px 0}
-            .nav-tabs{border:none;gap:12px;margin-bottom:28px}
-            .nav-tabs .nav-link{border:none;border-radius:16px;padding:14px 32px;font-weight:700;font-size:1.1rem;color:#667eea;background:#f8f9fa;transition:all .3s;letter-spacing:0.5px}
-            .nav-tabs .nav-link:hover{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;transform:translateY(-3px);box-shadow:0 8px 20px rgba(102,126,234,.35)}
-            .nav-tabs .nav-link.active{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;box-shadow:0 8px 20px rgba(102,126,234,.4)}
-            
-            /* CHARTS */
-            .charts{display:grid;grid-template-columns:repeat(2,1fr);gap:26px;margin-bottom:26px}
-            .chart{background:#fff;border-radius:24px;padding:32px;box-shadow:0 10px 35px rgba(0,0,0,.08);transition:all .35s ease;border:3px solid transparent}
-            .chart:hover{transform:translateY(-6px);box-shadow:0 20px 50px rgba(0,0,0,.15);border-color:#667eea}
-            .chart-full{grid-column:1/-1}
-            
-            /* STRATEGY CARDS */
-            .strat-g{display:grid;grid-template-columns:repeat(2,1fr);gap:26px}
-            .strat{border-radius:24px;padding:36px 32px;color:#fff;box-shadow:0 15px 40px rgba(0,0,0,.22);transition:all .45s cubic-bezier(0.4,0,0.2,1);position:relative;overflow:hidden}
-            .strat::after{content:'';position:absolute;bottom:-50px;right:-50px;width:200px;height:200px;background:rgba(255,255,255,.12);border-radius:50%;transition:.6s ease}
-            .strat:hover{transform:translateY(-8px) scale(1.03);box-shadow:0 25px 60px rgba(0,0,0,.32)}
-            .strat:hover::after{bottom:-20px;right:-20px;width:240px;height:240px}
-            .strat-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
-            .strat-name{font-size:2.2rem;font-weight:900;text-shadow:3px 3px 6px rgba(0,0,0,.25);letter-spacing:-0.5px}
-            .pri-badge{padding:10px 22px;border-radius:24px;font-weight:800;font-size:.95rem;letter-spacing:1.5px;background:rgba(255,255,255,.25);backdrop-filter:blur(10px);animation:glow 2.5s ease-in-out infinite;box-shadow:0 4px 15px rgba(0,0,0,.15)}
-            @keyframes glow{0%,100%{box-shadow:0 0 15px rgba(255,255,255,.3)}50%{box-shadow:0 0 28px rgba(255,255,255,.6)}}
-            .strat-sub{font-size:1.3rem;font-weight:700;margin-bottom:20px;opacity:.95;letter-spacing:0.3px}
-            .tactics{background:rgba(255,255,255,.12);border-radius:16px;padding:22px;margin:20px 0;backdrop-filter:blur(12px);box-shadow:inset 0 2px 8px rgba(0,0,0,.1)}
-            .tact-t{font-size:1.2rem;font-weight:800;margin-bottom:14px;letter-spacing:0.5px}
-            .tact{padding:14px 18px;margin:10px 0;background:rgba(255,255,255,.18);border-radius:12px;transition:all .3s ease;border-left:4px solid rgba(255,255,255,.45);font-weight:600;font-size:1.02rem}
-            .tact:hover{background:rgba(255,255,255,.28);transform:translateX(8px);border-left-width:6px;box-shadow:0 4px 12px rgba(0,0,0,.1)}
-            .kpi-g{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:20px 0}
-            .kpi{background:rgba(255,255,255,.16);padding:12px;border-radius:10px;font-weight:700;text-align:center;backdrop-filter:blur(8px);font-size:1.02rem;letter-spacing:0.3px}
-            .budget{display:flex;justify-content:space-between;margin-top:20px;padding:18px;background:rgba(255,255,255,.16);border-radius:12px;backdrop-filter:blur(10px);gap:12px}
-            .budget div{text-align:center;flex:1}
-            .budget-l{font-size:.92rem;opacity:.92;margin-bottom:6px;font-weight:600;letter-spacing:0.5px}
-            .budget-v{font-size:1.8rem;font-weight:900;letter-spacing:-0.5px}
-            
-            /* CHAMPION BREAKDOWN */
-            .champ-break{background:linear-gradient(135deg,#FFD700,#FFA500);border-radius:24px;padding:36px;color:#fff;margin:26px 0;box-shadow:0 15px 40px rgba(255,215,0,.4)}
-            .champ-break-t{font-size:2rem;font-weight:900;margin-bottom:26px;letter-spacing:-0.5px;text-align:center}
-            .champ-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:22px}
-            .champ-card{background:rgba(255,255,255,.16);border-radius:16px;padding:24px;backdrop-filter:blur(10px);transition:all .35s ease;box-shadow:0 4px 15px rgba(0,0,0,.1);border-left:5px solid rgba(255,255,255,.5)}
-            .champ-card:hover{background:rgba(255,255,255,.26);transform:translateY(-4px) translateX(4px);box-shadow:0 8px 25px rgba(0,0,0,.15);border-left-width:8px}
-            .champ-num{font-size:2.5rem;font-weight:900;margin-bottom:8px;text-shadow:2px 2px 4px rgba(0,0,0,.2)}
-            .champ-tier{font-size:1.3rem;font-weight:800;margin-bottom:12px;letter-spacing:0.3px}
-            .champ-desc{font-size:1.05rem;margin-bottom:12px;opacity:.95;line-height:1.5}
-            .champ-char{font-size:.95rem;background:rgba(255,255,255,.2);padding:10px;border-radius:8px;font-weight:600;margin-top:8px}
-            
-            /* INSIGHTS */
-            .ins{background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);border-radius:24px;padding:36px;color:#fff;margin:26px 0;box-shadow:0 15px 40px rgba(79,172,254,.4)}
-            .ins-t{font-size:2rem;font-weight:900;margin-bottom:26px;letter-spacing:-0.5px}
-            .ins-g{display:grid;grid-template-columns:repeat(2,1fr);gap:22px}
-            .ins-card{background:rgba(255,255,255,.16);border-radius:16px;padding:24px;backdrop-filter:blur(10px);transition:all .35s ease;box-shadow:0 4px 15px rgba(0,0,0,.1)}
-            .ins-card:hover{background:rgba(255,255,255,.26);transform:translateY(-4px);box-shadow:0 8px 25px rgba(0,0,0,.15)}
-            .ins-h{font-size:1.35rem;font-weight:800;margin-bottom:16px;letter-spacing:0.3px}
-            .ins-list{list-style:none;padding:0}
-            .ins-list li{padding:10px 0;border-bottom:1px solid rgba(255,255,255,.25);font-size:1.02rem;font-weight:500;letter-spacing:0.2px}
-            .ins-list li:last-child{border-bottom:none}
-            
-            /* RESPONSIVE */
-            @media(max-width:1200px){
-                .metrics,.charts,.strat-g,.ins-g{grid-template-columns:repeat(2,1fr)}
-                .filt-g{grid-template-columns:1fr}
-                .chart-full{grid-column:1/-1}
-            }
-            @media(max-width:768px){
-                .metrics,.charts,.strat-g,.ins-g{grid-template-columns:1fr}
-                .title{font-size:2.8rem}
-                .dash{padding:24px}
-            }
-        </style>
-    </head>
-    <body>
-        {%app_entry%}
-        <footer>
-            {%config%}
-            {%scripts%}
-            {%renderer%}
-        </footer>
-    </body>
-</html>'''
-
-# ========== CREATE INITIAL FIGURES ==========
-def create_initial_figures(data):
-    """Create initial figures for dashboard"""
-    
-    try:
-        # 1. Customer Distribution Pie
-        cluster_counts = data['Cluster_Label'].value_counts()
-        pie_fig = go.Figure(go.Pie(
-            labels=cluster_counts.index,
-            values=cluster_counts.values,
-            hole=0.68,
-            marker=dict(colors=[colors.get(l, '#95A5A6') for l in cluster_counts.index]),
-            textinfo='label+percent',
-            textposition='outside',
-            pull=[0.05] * len(cluster_counts)
-        ))
-        pie_fig.update_layout(
-            title={'text': "<b>🎯 Customer Distribution</b>", 'x': 0.5},
-            height=420,
-            showlegend=False,
-            annotations=[dict(
-                text=f'<b>{len(data):,}</b><br>Customers',
-                x=0.5, y=0.5,
-                font={'size': 20, 'color': '#667eea'},
-                showarrow=False
-            )],
-            margin=dict(t=60, b=40, l=40, r=40)
-        )
-        
-        # 2. Revenue by Segment (FIXED)
-        revenue_by_segment = data.groupby('Cluster_Label')['Monetary'].sum().sort_values(ascending=False)
-        bar_fig = go.Figure(go.Bar(
-            x=revenue_by_segment.index,
-            y=revenue_by_segment.values,
-            marker_color=[colors.get(l, '#95A5A6') for l in revenue_by_segment.index],
-            text=[f'£{v/1000:.1f}K' for v in revenue_by_segment.values],
-            textposition='auto'
-        ))
-        bar_fig.update_layout(
-            title={'text': "<b>💰 Revenue by Segment</b>", 'x': 0.5},
-            xaxis={'title': 'Segment', 'tickangle': -45},
-            yaxis={'title': 'Revenue (£)'},
-            height=420,
-            plot_bgcolor='rgba(245,247,250,.6)'
-        )
-        
-        # 3. 3D Scatter
-        sample_size = min(300, len(data))
-        sample_data = data.sample(sample_size, random_state=42)
-        
-        scatter_fig = go.Figure(go.Scatter3d(
-            x=sample_data['Recency'],
-            y=sample_data['Frequency'],
-            z=sample_data['Monetary'],
-            mode='markers',
-            marker=dict(
-                size=5,
-                color=sample_data['Cluster_KMeans'],
-                colorscale='Rainbow',
-                showscale=True,
-                opacity=0.8
-            ),
-            text=sample_data['Cluster_Label']
-        ))
-        scatter_fig.update_layout(
-            title={'text': "<b>📈 3D RFM Customer Analysis</b>", 'x': 0.5},
-            height=500,
-            scene=dict(
-                xaxis_title='Recency (days)',
-                yaxis_title='Frequency',
-                zaxis_title='Monetary (£)'
-            )
-        )
-        
-        # 4. Recency Distribution (FIXED)
-        hist_recency = go.Figure()
-        hist_recency.add_trace(go.Histogram(
-            x=data['Recency'],
-            nbinsx=30,
-            marker_color='#ff6b6b',
-            opacity=0.7
-        ))
-        hist_recency.update_layout(
-            title={'text': "<b>⏰ Recency Distribution</b>", 'x': 0.5},
-            xaxis_title='Days Since Last Purchase',
-            yaxis_title='Number of Customers',
-            height=340,
-            plot_bgcolor='rgba(245,247,250,.5)'
-        )
-        
-        # 5. Frequency Distribution (FIXED)
-        hist_frequency = go.Figure()
-        hist_frequency.add_trace(go.Histogram(
-            x=data['Frequency'],
-            nbinsx=30,
-            marker_color='#4ecdc4',
-            opacity=0.7
-        ))
-        hist_frequency.update_layout(
-            title={'text': "<b>🔄 Frequency Distribution</b>", 'x': 0.5},
-            xaxis_title='Number of Purchases',
-            yaxis_title='Number of Customers',
-            height=340,
-            plot_bgcolor='rgba(245,247,250,.5)'
-        )
-        
-        # 6. Monetary Distribution (FIXED)
-        hist_monetary = go.Figure()
-        hist_monetary.add_trace(go.Histogram(
-            x=data['Monetary'],
-            nbinsx=30,
-            marker_color='#45b7d1',
-            opacity=0.7
-        ))
-        hist_monetary.update_layout(
-            title={'text': "<b>💵 Monetary Distribution</b>", 'x': 0.5},
-            xaxis_title='Total Spend (£)',
-            yaxis_title='Number of Customers',
-            height=340,
-            plot_bgcolor='rgba(245,247,250,.5)'
-        )
-        
-        # 7. Summary Table
-        summary = data.groupby('Cluster_Label').agg({
-            'Recency': 'mean',
-            'Frequency': 'mean',
-            'Monetary': 'mean',
-            'AvgOrderValue': 'mean',
-            'RFM_Score': 'mean'
-        }).round(1).reset_index()
-        summary['Count'] = data.groupby('Cluster_Label').size().values
-        
-        table_fig = go.Figure(data=[go.Table(
-            header=dict(
-                values=['<b>Segment</b>', '<b>Count</b>', '<b>Recency</b>', '<b>Frequency</b>',
-                       '<b>Monetary</b>', '<b>Avg Order</b>', '<b>RFM Score</b>'],
-                fill_color='#667eea',
-                font=dict(color='white', size=13),
-                align='center',
-                height=40
-            ),
-            cells=dict(
-                values=[
-                    summary['Cluster_Label'],
-                    summary['Count'],
-                    [f"{v:.0f}d" for v in summary['Recency']],
-                    summary['Frequency'].round(1),
-                    [f"£{v:,.0f}" for v in summary['Monetary']],
-                    [f"£{v:.0f}" for v in summary['AvgOrderValue']],
-                    summary['RFM_Score'].round(1)
-                ],
-                fill_color=['white', '#f8f9fc'] * len(summary),
-                align='center',
-                font={'size': 12},
-                height=35
-            )
-        )])
-        table_fig.update_layout(height=380)
-        
-        return [pie_fig, bar_fig, scatter_fig, hist_recency, hist_frequency, hist_monetary, table_fig]
-    
-    except Exception as e:
-        print(f"Error creating initial figures: {e}")
-        traceback.print_exc()
-        # Return simple empty figures as fallback
-        empty_fig = go.Figure()
-        empty_fig.update_layout(title="Error loading figure")
-        return [empty_fig] * 7
-
-# Create initial figures
-initial_figures = create_initial_figures(rfm)
-print("✅ Initial figures created")
-
 # ========== APP LAYOUT ==========
 app.layout = html.Div([
     html.Div([
@@ -571,7 +306,7 @@ app.layout = html.Div([
             html.P("Customer Segmentation for Personalized Retail Marketing", className="sub")
         ], className="hdr"),
         
-        # Metrics
+        # Metrics - GANTI DENGAN LOWERCASE COLUMN NAMES
         html.Div([
             html.Div([
                 html.Div("👥", className="met-icon"),
@@ -582,23 +317,23 @@ app.layout = html.Div([
             
             html.Div([
                 html.Div("🎯", className="met-icon"),
-                html.Div(f"{rfm['Cluster_KMeans'].nunique()}", className="met-val"),
+                html.Div(f"{rfm['cluster_kmeans'].nunique()}", className="met-val"),
                 html.Div("SEGMENTS", className="met-lbl"),
                 html.Div("AI-Classified", className="met-sub")
             ], className="met"),
             
             html.Div([
                 html.Div("💰", className="met-icon"),
-                html.Div(f"£{rfm['Monetary'].sum()/1e6:.2f}M", className="met-val"),
+                html.Div(f"£{rfm['monetary'].sum()/1e6:.2f}M", className="met-val"),
                 html.Div("REVENUE", className="met-lbl"),
-                html.Div(f"Avg £{rfm['Monetary'].mean():.0f}", className="met-sub")
+                html.Div(f"Avg £{rfm['monetary'].mean():.0f}", className="met-sub")
             ], className="met"),
             
             html.Div([
                 html.Div("📈", className="met-icon"),
-                html.Div(f"£{rfm['AvgOrderValue'].mean():.0f}", className="met-val"),
+                html.Div(f"£{rfm['avgordervalue'].mean():.0f}", className="met-val"),
                 html.Div("AVG ORDER", className="met-lbl"),
-                html.Div(f"Peak £{rfm['AvgOrderValue'].max():.0f}", className="met-sub")
+                html.Div(f"Peak £{rfm['avgordervalue'].max():.0f}", className="met-sub")
             ], className="met")
         ], className="metrics"),
         
@@ -623,11 +358,11 @@ app.layout = html.Div([
                     html.Label("📊 RFM Score Range"),
                     dcc.RangeSlider(
                         id='rf',
-                        min=int(rfm['RFM_Score'].min()),
-                        max=int(rfm['RFM_Score'].max()),
-                        value=[int(rfm['RFM_Score'].min()), int(rfm['RFM_Score'].max())],
+                        min=int(rfm['rfm_score'].min()),
+                        max=int(rfm['rfm_score'].max()),
+                        value=[int(rfm['rfm_score'].min()), int(rfm['rfm_score'].max())],
                         marks={i: {'label': str(i), 'style': {'fontWeight': '600'}}
-                               for i in range(int(rfm['RFM_Score'].min()), int(rfm['RFM_Score'].max())+1, 2)},
+                               for i in range(int(rfm['rfm_score'].min()), int(rfm['rfm_score'].max())+1, 2)},
                         tooltip={'placement': 'bottom', 'always_visible': False}
                     )
                 ]),
@@ -655,68 +390,40 @@ app.layout = html.Div([
         dbc.Tabs([
             dbc.Tab(label="📊 Analytics Dashboard", children=[
                 html.Div([
-                    # Row 1
+                    # Row 1 - Pie Chart and Revenue Chart
                     html.Div([
                         html.Div([
-                            dcc.Graph(
-                                id='g1', 
-                                figure=initial_figures[0],
-                                config={'displayModeBar': False}
-                            )
+                            dcc.Graph(id='g1', config={'displayModeBar': False})
                         ], className="chart"),
                         
                         html.Div([
-                            dcc.Graph(
-                                id='g2',
-                                figure=initial_figures[1],
-                                config={'displayModeBar': False}
-                            )
+                            dcc.Graph(id='g2', config={'displayModeBar': False})
                         ], className="chart")
                     ], className="charts"),
                     
-                    # Row 2
+                    # Row 2 - 3D Scatter
                     html.Div([
-                        dcc.Graph(
-                            id='g3',
-                            figure=initial_figures[2],
-                            config={'displayModeBar': False}
-                        )
+                        dcc.Graph(id='g3', config={'displayModeBar': False})
                     ], className="chart chart-full"),
                     
-                    # Row 3
+                    # Row 3 - Histograms
                     html.Div([
                         html.Div([
-                            dcc.Graph(
-                                id='g4',
-                                figure=initial_figures[3],
-                                config={'displayModeBar': False}
-                            )
+                            dcc.Graph(id='g4', config={'displayModeBar': False})
                         ], className="chart"),
                         
                         html.Div([
-                            dcc.Graph(
-                                id='g5',
-                                figure=initial_figures[4],
-                                config={'displayModeBar': False}
-                            )
+                            dcc.Graph(id='g5', config={'displayModeBar': False})
                         ], className="chart"),
                         
                         html.Div([
-                            dcc.Graph(
-                                id='g6',
-                                figure=initial_figures[5],
-                                config={'displayModeBar': False}
-                            )
+                            dcc.Graph(id='g6', config={'displayModeBar': False})
                         ], className="chart")
                     ], style={'display': 'grid', 'gridTemplateColumns': 'repeat(3, 1fr)', 'gap': '26px', 'marginBottom': '26px'}),
                     
-                    # Row 4
+                    # Row 4 - Summary Table
                     html.Div([
-                        dcc.Graph(
-                            id='g7',
-                            figure=initial_figures[6],
-                            config={'displayModeBar': False}
-                        )
+                        dcc.Graph(id='g7', config={'displayModeBar': False})
                     ], className="chart chart-full")
                 ], className="tab-content")
             ]),
@@ -740,8 +447,8 @@ app.layout = html.Div([
     # Footer
     html.Div([
         html.Hr(),
-        html.P(f"✅ Dashboard loaded | {len(rfm):,} customers | {rfm['Cluster_KMeans'].nunique()} segments"),
-        html.P(f"Data: {'CSV/Excel' if any(os.path.exists(f) for f in ['final_customer_segments.csv', 'final_customer_segments (1).csv', 'final_customer_segments.xlsx']) else 'Enhanced'} | Railway")
+        html.P(f"✅ Dashboard loaded | {len(rfm):,} customers | {rfm['cluster_kmeans'].nunique()} segments"),
+        html.P(f"Data: {'CSV' if any(os.path.exists(f) for f in ['final_customer_segments.csv', 'final_customer_segments (1).csv']) else 'Enhanced'} | Railway")
     ], style={
         'textAlign': 'center',
         'marginTop': '50px',
@@ -749,6 +456,192 @@ app.layout = html.Div([
         'color': '#666'
     })
 ])
+
+# ========== CREATE INITIAL FIGURES ==========
+def create_initial_figures(data):
+    """Create initial figures for dashboard"""
+    
+    try:
+        # 1. Customer Distribution Pie
+        if 'cluster_label' not in data.columns:
+            # Create cluster_label if not exists
+            data['cluster_label'] = data.apply(lambda row: f"Cluster {row['cluster_kmeans']}", axis=1)
+        
+        cluster_counts = data['cluster_label'].value_counts()
+        pie_fig = go.Figure(go.Pie(
+            labels=cluster_counts.index,
+            values=cluster_counts.values,
+            hole=0.68,
+            marker=dict(colors=[colors.get(l, '#95A5A6') for l in cluster_counts.index]),
+            textinfo='label+percent',
+            textposition='outside',
+            pull=[0.05] * len(cluster_counts)
+        ))
+        pie_fig.update_layout(
+            title={'text': "<b>🎯 Customer Distribution</b>", 'x': 0.5},
+            height=420,
+            showlegend=False,
+            annotations=[dict(
+                text=f'<b>{len(data):,}</b><br>Customers',
+                x=0.5, y=0.5,
+                font={'size': 20, 'color': '#667eea'},
+                showarrow=False
+            )],
+            margin=dict(t=60, b=40, l=40, r=40)
+        )
+        
+        # 2. Revenue by Segment
+        revenue_by_segment = data.groupby('cluster_label')['monetary'].sum().sort_values()
+        bar_fig = go.Figure(go.Bar(
+            x=revenue_by_segment.values,
+            y=revenue_by_segment.index,
+            orientation='h',
+            marker_color=[colors.get(l, '#95A5A6') for l in revenue_by_segment.index],
+            text=[f'£{v:,.0f}' for v in revenue_by_segment.values],
+            textposition='outside'
+        ))
+        bar_fig.update_layout(
+            title={'text': "<b>💰 Revenue by Segment</b>", 'x': 0.5},
+            xaxis={'title': 'Revenue (£)'},
+            yaxis={'title': 'Segment'},
+            height=420,
+            plot_bgcolor='rgba(245,247,250,.6)'
+        )
+        
+        # 3. 3D Scatter
+        sample_size = min(300, len(data))
+        sample_data = data.sample(sample_size, random_state=42)
+        
+        scatter_fig = go.Figure(go.Scatter3d(
+            x=sample_data['recency'],
+            y=sample_data['frequency'],
+            z=sample_data['monetary'],
+            mode='markers',
+            marker=dict(
+                size=5,
+                color=sample_data['cluster_kmeans'],
+                colorscale='Rainbow',
+                showscale=True,
+                opacity=0.8
+            ),
+            text=sample_data['cluster_label']
+        ))
+        scatter_fig.update_layout(
+            title={'text': "<b>📈 3D RFM Customer Analysis</b>", 'x': 0.5},
+            height=500,
+            scene=dict(
+                xaxis_title='Recency (days)',
+                yaxis_title='Frequency',
+                zaxis_title='Monetary (£)'
+            )
+        )
+        
+        # 4. Recency Distribution
+        hist_recency = go.Figure()
+        hist_recency.add_trace(go.Histogram(
+            x=data['recency'],
+            nbinsx=30,
+            marker_color='#ff6b6b',
+            opacity=0.7
+        ))
+        hist_recency.update_layout(
+            title={'text': "<b>⏰ Recency Distribution</b>", 'x': 0.5},
+            xaxis_title='Days Since Last Purchase',
+            yaxis_title='Number of Customers',
+            height=340,
+            plot_bgcolor='rgba(245,247,250,.5)'
+        )
+        
+        # 5. Frequency Distribution
+        hist_frequency = go.Figure()
+        hist_frequency.add_trace(go.Histogram(
+            x=data['frequency'],
+            nbinsx=30,
+            marker_color='#4ecdc4',
+            opacity=0.7
+        ))
+        hist_frequency.update_layout(
+            title={'text': "<b>🔄 Frequency Distribution</b>", 'x': 0.5},
+            xaxis_title='Number of Purchases',
+            yaxis_title='Number of Customers',
+            height=340,
+            plot_bgcolor='rgba(245,247,250,.5)'
+        )
+        
+        # 6. Monetary Distribution
+        hist_monetary = go.Figure()
+        hist_monetary.add_trace(go.Histogram(
+            x=data['monetary'],
+            nbinsx=30,
+            marker_color='#45b7d1',
+            opacity=0.7
+        ))
+        hist_monetary.update_layout(
+            title={'text': "<b>💵 Monetary Distribution</b>", 'x': 0.5},
+            xaxis_title='Total Spend (£)',
+            yaxis_title='Number of Customers',
+            height=340,
+            plot_bgcolor='rgba(245,247,250,.5)'
+        )
+        
+        # 7. Summary Table
+        if 'cluster_label' in data.columns and 'avgordervalue' in data.columns:
+            summary = data.groupby('cluster_label').agg({
+                'recency': 'mean',
+                'frequency': 'mean',
+                'monetary': 'mean',
+                'avgordervalue': 'mean',
+                'rfm_score': 'mean'
+            }).round(1).reset_index()
+            summary['count'] = data.groupby('cluster_label').size().values
+            
+            table_fig = go.Figure(data=[go.Table(
+                header=dict(
+                    values=['<b>Segment</b>', '<b>Count</b>', '<b>Recency</b>', '<b>Frequency</b>',
+                           '<b>Monetary</b>', '<b>Avg Order</b>', '<b>RFM Score</b>'],
+                    fill_color='#667eea',
+                    font=dict(color='white', size=13),
+                    align='center',
+                    height=40
+                ),
+                cells=dict(
+                    values=[
+                        summary['cluster_label'],
+                        summary['count'],
+                        [f"{v:.0f}d" for v in summary['recency']],
+                        summary['frequency'].round(1),
+                        [f"£{v:,.0f}" for v in summary['monetary']],
+                        [f"£{v:.0f}" for v in summary['avgordervalue']],
+                        summary['rfm_score'].round(1)
+                    ],
+                    fill_color=['white', '#f8f9fc'] * len(summary),
+                    align='center',
+                    font={'size': 12},
+                    height=35
+                )
+            )])
+            table_fig.update_layout(height=380)
+        else:
+            # Create empty table if columns missing
+            table_fig = go.Figure()
+            table_fig.update_layout(
+                title={'text': 'Data not available', 'x': 0.5},
+                height=380
+            )
+        
+        return [pie_fig, bar_fig, scatter_fig, hist_recency, hist_frequency, hist_monetary, table_fig]
+    
+    except Exception as e:
+        print(f"Error creating initial figures: {e}")
+        traceback.print_exc()
+        # Return simple empty figures as fallback
+        empty_fig = go.Figure()
+        empty_fig.update_layout(title="Loading...")
+        return [empty_fig] * 7
+
+# Create initial figures
+initial_figures = create_initial_figures(rfm)
+print("✅ Initial figures created")
 
 # ========== CALLBACK FUNCTIONS ==========
 @app.callback(
@@ -772,14 +665,15 @@ def update_all_charts(segment, rfm_range, priority):
         print(f"\n🔄 Updating dashboard with filters:")
         print(f"   Segment: {segment}, RFM Range: {rfm_range}, Priority: {priority}")
         
-        # Filter data
-        df = rfm[(rfm['RFM_Score'] >= rfm_range[0]) & (rfm['RFM_Score'] <= rfm_range[1])]
+        # Filter data - GUNAKAN LOWERCASE COLUMN NAMES
+        df = rfm[(rfm['rfm_score'] >= rfm_range[0]) & (rfm['rfm_score'] <= rfm_range[1])]
         
         if segment != 'all':
-            df = df[df['Cluster_KMeans'] == segment]
+            df = df[df['cluster_kmeans'] == segment]
         
         if priority != 'all':
-            df = df[df['Priority'] == priority]
+            if 'priority' in df.columns:
+                df = df[df['priority'] == priority]
         
         print(f"✅ Filtered to {len(df)} customers")
         
@@ -802,8 +696,16 @@ def update_all_charts(segment, rfm_range, priority):
             
             return [empty_fig] * 7 + [empty_message, empty_message, empty_message]
         
+        # Create cluster_label if not exists
+        if 'cluster_label' not in df.columns:
+            for c in df['cluster_kmeans'].unique():
+                if c in profs:
+                    df.loc[df['cluster_kmeans'] == c, 'cluster_label'] = f"{profs[c]['name'][:2]} {profs[c]['name'][2:]} (C{c})"
+                else:
+                    df.loc[df['cluster_kmeans'] == c, 'cluster_label'] = f"Cluster {c}"
+        
         # 1. Customer Distribution Pie
-        cluster_counts = df['Cluster_Label'].value_counts()
+        cluster_counts = df['cluster_label'].value_counts()
         pie_fig = go.Figure(go.Pie(
             labels=cluster_counts.index,
             values=cluster_counts.values,
@@ -826,8 +728,8 @@ def update_all_charts(segment, rfm_range, priority):
             margin=dict(t=60, b=40, l=40, r=40)
         )
         
-        # 2. Revenue by Segment (FIXED - horizontal bar)
-        revenue_by_segment = df.groupby('Cluster_Label')['Monetary'].sum().sort_values()
+        # 2. Revenue by Segment
+        revenue_by_segment = df.groupby('cluster_label')['monetary'].sum().sort_values()
         bar_fig = go.Figure(go.Bar(
             x=revenue_by_segment.values,
             y=revenue_by_segment.index,
@@ -849,18 +751,18 @@ def update_all_charts(segment, rfm_range, priority):
         sample_data = df.sample(sample_size, random_state=42)
         
         scatter_fig = go.Figure(go.Scatter3d(
-            x=sample_data['Recency'],
-            y=sample_data['Frequency'],
-            z=sample_data['Monetary'],
+            x=sample_data['recency'],
+            y=sample_data['frequency'],
+            z=sample_data['monetary'],
             mode='markers',
             marker=dict(
                 size=5,
-                color=sample_data['Cluster_KMeans'],
+                color=sample_data['cluster_kmeans'],
                 colorscale='Rainbow',
                 showscale=True,
                 opacity=0.8
             ),
-            text=sample_data['Cluster_Label']
+            text=sample_data['cluster_label']
         ))
         scatter_fig.update_layout(
             title={'text': "<b>📈 3D RFM Customer Analysis</b>", 'x': 0.5},
@@ -872,10 +774,10 @@ def update_all_charts(segment, rfm_range, priority):
             )
         )
         
-        # 4. Recency Distribution (FIXED)
+        # 4. Recency Distribution
         hist_recency = go.Figure()
         hist_recency.add_trace(go.Histogram(
-            x=df['Recency'],
+            x=df['recency'],
             nbinsx=30,
             marker_color='#ff6b6b',
             opacity=0.7
@@ -888,10 +790,10 @@ def update_all_charts(segment, rfm_range, priority):
             plot_bgcolor='rgba(245,247,250,.5)'
         )
         
-        # 5. Frequency Distribution (FIXED)
+        # 5. Frequency Distribution
         hist_frequency = go.Figure()
         hist_frequency.add_trace(go.Histogram(
-            x=df['Frequency'],
+            x=df['frequency'],
             nbinsx=30,
             marker_color='#4ecdc4',
             opacity=0.7
@@ -904,10 +806,10 @@ def update_all_charts(segment, rfm_range, priority):
             plot_bgcolor='rgba(245,247,250,.5)'
         )
         
-        # 6. Monetary Distribution (FIXED)
+        # 6. Monetary Distribution
         hist_monetary = go.Figure()
         hist_monetary.add_trace(go.Histogram(
-            x=df['Monetary'],
+            x=df['monetary'],
             nbinsx=30,
             marker_color='#45b7d1',
             opacity=0.7
@@ -921,14 +823,14 @@ def update_all_charts(segment, rfm_range, priority):
         )
         
         # 7. Summary Table
-        summary = df.groupby('Cluster_Label').agg({
-            'Recency': 'mean',
-            'Frequency': 'mean',
-            'Monetary': 'mean',
-            'AvgOrderValue': 'mean',
-            'RFM_Score': 'mean'
+        summary = df.groupby('cluster_label').agg({
+            'recency': 'mean',
+            'frequency': 'mean',
+            'monetary': 'mean',
+            'avgordervalue': 'mean',
+            'rfm_score': 'mean'
         }).round(1).reset_index()
-        summary['Count'] = df.groupby('Cluster_Label').size().values
+        summary['count'] = df.groupby('cluster_label').size().values
         
         table_fig = go.Figure(data=[go.Table(
             header=dict(
@@ -941,13 +843,13 @@ def update_all_charts(segment, rfm_range, priority):
             ),
             cells=dict(
                 values=[
-                    summary['Cluster_Label'],
-                    summary['Count'],
-                    [f"{v:.0f}d" for v in summary['Recency']],
-                    summary['Frequency'].round(1),
-                    [f"£{v:,.0f}" for v in summary['Monetary']],
-                    [f"£{v:.0f}" for v in summary['AvgOrderValue']],
-                    summary['RFM_Score'].round(1)
+                    summary['cluster_label'],
+                    summary['count'],
+                    [f"{v:.0f}d" for v in summary['recency']],
+                    summary['frequency'].round(1),
+                    [f"£{v:,.0f}" for v in summary['monetary']],
+                    [f"£{v:.0f}" for v in summary['avgordervalue']],
+                    summary['rfm_score'].round(1)
                 ],
                 fill_color=['white', '#f8f9fc'] * len(summary),
                 align='center',
@@ -958,7 +860,7 @@ def update_all_charts(segment, rfm_range, priority):
         table_fig.update_layout(height=380)
         
         # 8. Champion Breakdown
-        champion_clusters = [c for c in df['Cluster_KMeans'].unique() 
+        champion_clusters = [c for c in df['cluster_kmeans'].unique() 
                            if c in profs and profs[c]['name'] == '🏆 Champions']
         
         champion_breakdown = None
@@ -967,7 +869,7 @@ def update_all_charts(segment, rfm_range, priority):
             for cid in sorted(champion_clusters):
                 if cid in champion_details:
                     detail = champion_details[cid]
-                    count = len(df[df['Cluster_KMeans'] == cid])
+                    count = len(df[df['cluster_kmeans'] == cid])
                     champ_cards.append(html.Div([
                         html.Div(f"Champion C{cid}", className="champ-num"),
                         html.Div(f"🏅 {detail['tier']}", className="champ-tier"),
@@ -987,7 +889,7 @@ def update_all_charts(segment, rfm_range, priority):
         strategy_cards = []
         for cid, strat in profs.items():
             if segment == 'all' or segment == cid:
-                customer_count = len(df[df['Cluster_KMeans'] == cid])
+                customer_count = len(df[df['cluster_kmeans'] == cid])
                 if customer_count > 0:
                     strategy_cards.append(html.Div([
                         html.Div([
@@ -1030,10 +932,10 @@ def update_all_charts(segment, rfm_range, priority):
                 html.Div([
                     html.Div("📊 Top Performers", className="ins-h"),
                     html.Ul([
-                        html.Li(f"🏆 Highest Revenue: {df.groupby('Cluster_Label')['Monetary'].sum().idxmax()}"),
-                        html.Li(f"👥 Largest Group: {df['Cluster_Label'].value_counts().idxmax()} ({df['Cluster_Label'].value_counts().max():,} customers)"),
-                        html.Li(f"💰 Best AOV: {df.groupby('Cluster_Label')['AvgOrderValue'].mean().idxmax()} (£{df.groupby('Cluster_Label')['AvgOrderValue'].mean().max():.0f})"),
-                        html.Li(f"🔄 Most Frequent: {df.groupby('Cluster_Label')['Frequency'].mean().idxmax()} ({df.groupby('Cluster_Label')['Frequency'].mean().max():.1f} orders)")
+                        html.Li(f"🏆 Highest Revenue: {df.groupby('cluster_label')['monetary'].sum().idxmax()}"),
+                        html.Li(f"👥 Largest Group: {df['cluster_label'].value_counts().idxmax()} ({df['cluster_label'].value_counts().max():,} customers)"),
+                        html.Li(f"💰 Best AOV: {df.groupby('cluster_label')['avgordervalue'].mean().idxmax()} (£{df.groupby('cluster_label')['avgordervalue'].mean().max():.0f})"),
+                        html.Li(f"🔄 Most Frequent: {df.groupby('cluster_label')['frequency'].mean().idxmax()} ({df.groupby('cluster_label')['frequency'].mean().max():.1f} orders)")
                     ], className="ins-list")
                 ], className="ins-card"),
                 
@@ -1075,18 +977,10 @@ def health_check():
     return {
         'status': 'healthy',
         'customers': len(rfm),
-        'segments': rfm['Cluster_KMeans'].nunique(),
-        'revenue': f"£{rfm['Monetary'].sum()/1e6:.2f}M",
-        'data_source': 'CSV' if any(os.path.exists(f) for f in ['final_customer_segments.csv', 'final_customer_segments (1).csv', 'final_customer_segments.xlsx']) else 'Enhanced',
-        'debug': {
-            'files': os.listdir('.'),
-            'python': sys.version
-        }
+        'segments': rfm['cluster_kmeans'].nunique() if 'cluster_kmeans' in rfm.columns else 0,
+        'revenue': f"£{rfm['monetary'].sum()/1e6:.2f}M" if 'monetary' in rfm.columns else "N/A",
+        'data_source': 'CSV' if any(os.path.exists(f) for f in ['final_customer_segments.csv', 'final_customer_segments (1).csv']) else 'Enhanced'
     }
-
-@server.route('/')
-def index():
-    return app.index()
 
 # ========== RUN APP ==========
 if __name__ == '__main__':
@@ -1095,8 +989,7 @@ if __name__ == '__main__':
     
     print(f"\n{'='*80}")
     print(f"🚀 STARTING FIXED DASHBOARD ON PORT: {port}")
-    print(f"📊 Data: {len(rfm):,} customers, {rfm['Cluster_KMeans'].nunique()} segments")
-    print(f"💰 Revenue: £{rfm['Monetary'].sum()/1e6:.2f}M")
+    print(f"📊 Data: {len(rfm):,} customers")
     print(f"🔧 Debug mode: {debug}")
     print(f"{'='*80}\n")
     
