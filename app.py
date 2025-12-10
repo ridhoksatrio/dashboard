@@ -450,7 +450,7 @@ def dash_app():
 # Setup and Run untuk Railway
 if __name__ == '__main__':
     # Gunakan PORT dari environment variable Railway, default 8050
-    port = int(os.environ.get("PORT", 8050))
+    port = int(os.environ.get("PORT", 8080))
     # Debug mode hanya jika bukan di production
     debug = os.environ.get("RAILWAY_ENVIRONMENT") != "production"
     
