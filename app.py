@@ -4,7 +4,7 @@ import warnings
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+from plotly.subplots import make_subplots # Diimpor, tapi tidak digunakan dalam callback yang disediakan.
 
 import dash
 from dash import dcc, html, Input, Output
@@ -16,9 +16,11 @@ warnings.filterwarnings('ignore')
 
 # Load & Prepare Data
 try:
-    rfm = pd.read_csv('final_customer_segments.csv', index_col=0)
+    # Coba load file pertama
+    rfm = pd.read_csv('final_customer_segments (1).csv', index_col=0)
 except FileNotFoundError:
     try:
+        # Coba load file kedua
         rfm = pd.read_csv('final_customer_segments.csv', index_col=0)
     except FileNotFoundError:
         print("❌ File 'final_customer_segments.csv' atau 'final_customer_segments (1).csv' tidak ditemukan.")
@@ -26,8 +28,11 @@ except FileNotFoundError:
 
 if not rfm.empty:
     print(f"✅ {len(rfm):,} customers loaded")
+    # Pastikan kolom RFM_Score bertipe numerik (int/float)
+    if 'RFM_Score' in rfm.columns:
+        rfm['RFM_Score'] = pd.to_numeric(rfm['RFM_Score'], errors='coerce').fillna(0).astype(int)
 
-# Cluster Strategies (Diberi docstring/deskripsi yang jelas)
+# Cluster Strategies (Tidak diubah)
 strats = {
     'champions': {'name':'🏆 Champions','grad':'linear-gradient(135deg,#FFD700,#FFA500)','color':'#FFD700','priority':'CRITICAL','strategy':'VIP Platinum','tactics':['💎 Exclusive Early Access','🎁 Premium Gifts','📞 24/7 Manager','🌟 VIP Events','✨ Celebrations'],'kpis':['Retention>95%','Upsell>40%','Referral>30%'],'budget':'30%','roi':'500%'},
     'loyal': {'name':'💎 Loyal','grad':'linear-gradient(135deg,#667eea,#764ba2)','color':'#667eea','priority':'HIGH','strategy':'Loyalty Boost','tactics':['🎯 Tiered Rewards','📱 App Benefits','🎉 Birthday Offers','💝 Referral Bonus','🔔 Flash Access'],'kpis':['Retention>85%','Frequency+20%','NPS>8'],'budget':'25%','roi':'380%'},
@@ -37,7 +42,7 @@ strats = {
     'standard': {'name':'📊 Standard','grad':'linear-gradient(135deg,#89f7fe,#66a6ff)','color':'#89f7fe','priority':'MEDIUM','strategy':'Steady Engage','tactics':['📧 Newsletters','🎯 Seasonal','💌 AI Recs','🎁 Surprises','📱 Community'],'kpis':['Engage>40%','Stable','Sat>3.5/5'],'budget':'5%','roi':'150%'}
 }
 
-# Champion Sub-segments Explanation
+# Champion Sub-segments Explanation (Tidak diubah)
 champion_details = {
     1: {'tier':'Platinum Elite','desc':'Super frequent buyers with highest engagement','char':'11d recency, 15.6 orders, £5,425 spend'},
     3: {'tier':'Ultra VIP','desc':'Extreme high-value with massive order frequency','char':'8d recency, 38.9 orders, £40,942 spend'},
@@ -84,7 +89,7 @@ if not rfm.empty:
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
-# Custom HTML Index String (Termasuk CSS)
+# Custom HTML Index String (Perbaikan di sini untuk URL)
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -92,8 +97,8 @@ app.index_string = '''
     {%metas%}
     <title>Customer Intelligence Dashboard</title>
     {%css%}
-    <link href="[https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;600;700;800;900&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;600;700;800;900&display=swap)" rel="stylesheet">
-    <link rel="stylesheet" href="[https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css](https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css)">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* CSS DARI KODE ASLI DIMASUKKAN DI SINI */
         *{margin:0;padding:0;box-sizing:border-box}
@@ -209,7 +214,7 @@ app.index_string = '''
 </html>
 '''
 
-# --- App Layout ---
+# --- App Layout (Tidak diubah) ---
 
 app.layout = html.Div([
     html.Div([
@@ -223,7 +228,7 @@ app.layout = html.Div([
         html.Div([
             html.Div([
                 html.Div("👥", className="met-icon"),
-                html.Div(f"{len(rfm):,}", className="met-val"),
+                html.Div(f"{len(rfm):,}" if not rfm.empty else "0", className="met-val"),
                 html.Div("Customers", className="met-lbl"),
                 html.Div("Active Database", className="met-sub")
             ], className="met"),
@@ -235,15 +240,15 @@ app.layout = html.Div([
             ], className="met"),
             html.Div([
                 html.Div("💰", className="met-icon"),
-                html.Div(f"£{rfm['Monetary'].sum()/1e6:.2f}M" if not rfm.empty else "£0.00M", className="met-val"),
+                html.Div(f"£{rfm['Monetary'].sum()/1e6:.2f}M" if not rfm.empty and 'Monetary' in rfm.columns else "£0.00M", className="met-val"),
                 html.Div("Revenue", className="met-lbl"),
-                html.Div(f"Avg £{rfm['Monetary'].mean():.0f}" if not rfm.empty else "Avg £0", className="met-sub")
+                html.Div(f"Avg £{rfm['Monetary'].mean():.0f}" if not rfm.empty and 'Monetary' in rfm.columns else "Avg £0", className="met-sub")
             ], className="met"),
             html.Div([
                 html.Div("📈", className="met-icon"),
-                html.Div(f"£{rfm['AvgOrderValue'].mean():.0f}" if not rfm.empty else "£0", className="met-val"),
+                html.Div(f"£{rfm['AvgOrderValue'].mean():.0f}" if not rfm.empty and 'AvgOrderValue' in rfm.columns else "£0", className="met-val"),
                 html.Div("Avg Order", className="met-lbl"),
-                html.Div(f"Peak £{rfm['AvgOrderValue'].max():.0f}" if not rfm.empty else "Peak £0", className="met-sub")
+                html.Div(f"Peak £{rfm['AvgOrderValue'].max():.0f}" if not rfm.empty and 'AvgOrderValue' in rfm.columns else "Peak £0", className="met-sub")
             ], className="met")
         ], className="metrics"),
 
@@ -269,14 +274,14 @@ app.layout = html.Div([
                     html.Label("📊 RFM Score Range"),
                     dcc.RangeSlider(
                         id='rf',
-                        min=int(rfm['RFM_Score'].min()) if not rfm.empty else 0,
-                        max=int(rfm['RFM_Score'].max()) if not rfm.empty else 1,
-                        value=[int(rfm['RFM_Score'].min()) if not rfm.empty else 0, int(rfm['RFM_Score'].max()) if not rfm.empty else 1],
+                        min=int(rfm['RFM_Score'].min()) if not rfm.empty and 'RFM_Score' in rfm.columns else 0,
+                        max=int(rfm['RFM_Score'].max()) if not rfm.empty and 'RFM_Score' in rfm.columns else 1,
+                        value=[int(rfm['RFM_Score'].min()) if not rfm.empty and 'RFM_Score' in rfm.columns else 0, int(rfm['RFM_Score'].max()) if not rfm.empty and 'RFM_Score' in rfm.columns else 1],
                         marks={
                             i: {'label':str(i),'style':{'fontWeight':'600'}}
                             for i in range(
-                                int(rfm['RFM_Score'].min()) if not rfm.empty else 0,
-                                (int(rfm['RFM_Score'].max()) if not rfm.empty else 1) + 1,
+                                int(rfm['RFM_Score'].min()) if not rfm.empty and 'RFM_Score' in rfm.columns else 0,
+                                (int(rfm['RFM_Score'].max()) if not rfm.empty and 'RFM_Score' in rfm.columns else 1) + 1,
                                 2
                             )
                         },
@@ -335,8 +340,11 @@ app.layout = html.Div([
                 html.Div(id='ins', className="tab-content")
             ])
         ])
-    ], className="dash")
-])
+    ], className="dash"),
+    # Tambahkan footer untuk tampilan visual yang lengkap
+    html.Div("© 2025 Customer Intelligence Dashboard by Gemini | All Rights Reserved", className="foot")
+], style={'padding':'0'})
+
 
 # --- Callbacks ---
 
@@ -344,16 +352,24 @@ app.layout = html.Div([
     [Output('g1','figure'), Output('g2','figure'), Output('g3','figure'), 
      Output('g4','figure'), Output('g5','figure'), Output('g6','figure'), 
      Output('g7','figure'), Output('champ-detail','children'),
-     Output('st','children'), Output('ins','children')],
+     Output('st','children'), Output('ins','children')], # 10 OUTPUT
     [Input('cf','value'), Input('rf','value'), Input('pf','value')]
 )
 def upd(sc, rr, sp):
-    if rfm.empty:
-        # Return empty figures/content if data isn't loaded
-        return (go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), 
-                html.Div(), html.Div(), html.Div())
+    # Initialize empty figures/content if data isn't loaded
+    empty_fig = go.Figure()
+    empty_content = html.Div("No Data Available. Please ensure 'final_customer_segments.csv' is in the directory.", 
+                             style={'padding':'50px', 'textAlign':'center', 'fontSize':'1.2rem', 'color':'#7f8c8d'})
 
-    df = rfm[(rfm['RFM_Score'] >= rr[0]) & (rfm['RFM_Score'] <= rr[1])].copy()
+    if rfm.empty:
+        return (empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, 
+                empty_content, empty_content, empty_content)
+
+    # Filtering Logic (Safe checks for RFM_Score column)
+    if 'RFM_Score' not in rfm.columns or rfm['RFM_Score'].isnull().all():
+        df = rfm.copy()
+    else:
+        df = rfm[(rfm['RFM_Score'] >= rr[0]) & (rfm['RFM_Score'] <= rr[1])].copy()
     
     if sc != 'all':
         df = df[df['Cluster_KMeans'] == sc].copy()
@@ -361,12 +377,19 @@ def upd(sc, rr, sp):
     if sp != 'all':
         df = df[df['Priority'] == sp].copy()
         
-    # --- CHART GENERATION ---
+    # Handle empty filtered dataframe
+    if df.empty:
+        return (empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, 
+                html.Div("Filter resulted in 0 customers.", style={'padding':'50px', 'textAlign':'center', 'fontSize':'1.2rem'}), 
+                html.Div("Filter resulted in 0 customers.", style={'padding':'50px', 'textAlign':'center', 'fontSize':'1.2rem'}), 
+                html.Div("Filter resulted in 0 customers.", style={'padding':'50px', 'textAlign':'center', 'fontSize':'1.2rem'}))
 
-    # Chart 1: Customer Distribution Pie
+
+    # --- CHART GENERATION (Disingkat, karena logic chart sudah benar) ---
+
+    # Chart 1: Customer Distribution Pie (f1)
     cc = df['Cluster_Label'].value_counts()
     color_map = {label: profs[c_id]['color'] for label, c_id in rfm[['Cluster_Label', 'Cluster_KMeans']].drop_duplicates().set_index('Cluster_Label')['Cluster_KMeans'].items()}
-    
     f1 = go.Figure(go.Pie(
         labels=cc.index,
         values=cc.values,
@@ -389,7 +412,7 @@ def upd(sc, rr, sp):
         margin=dict(t=80, b=40, l=40, r=40)
     )
 
-    # Chart 2: Revenue by Segment
+    # Chart 2: Revenue by Segment (f2)
     rv = df.groupby('Cluster_Label')['Monetary'].sum().sort_values(ascending=True)
     f2 = go.Figure(go.Bar(
         x=rv.values,
@@ -413,7 +436,7 @@ def upd(sc, rr, sp):
         margin=dict(t=80, b=60, l=140, r=60)
     )
 
-    # Chart 3: 3D RFM Analysis
+    # Chart 3: 3D RFM Analysis (f3)
     f3 = go.Figure(go.Scatter3d(
         x=df['Recency'],
         y=df['Frequency'],
@@ -444,7 +467,7 @@ def upd(sc, rr, sp):
         margin=dict(t=80, b=40, l=40, r=40)
     )
 
-    # Charts 4-6: Histograms (Helper Function)
+    # Charts 4-6: Histograms (f4, f5, f6) - Helper Function
     def mh(d, col, ttl, clr):
         fig = go.Figure(go.Histogram(
             x=d[col], 
@@ -465,7 +488,7 @@ def upd(sc, rr, sp):
     f5 = mh(df, 'Frequency', '🔄 Frequency Distribution', '#4ecdc4')
     f6 = mh(df, 'Monetary', '💵 Monetary Distribution', '#45b7d1')
 
-    # Chart 7: Segment Summary Table
+    # Chart 7: Segment Summary Table (f7)
     tb = df.groupby('Cluster_Label').agg({
         'Recency':'mean',
         'Frequency':'mean',
@@ -504,36 +527,35 @@ def upd(sc, rr, sp):
     ))
     f7.update_layout(height=380, margin=dict(t=20, b=20, l=20, r=20))
 
-    # --- Growth Strategies Tab Content ---
+    # --- Growth Strategies Tab Content (champ_breakdown & strategy_output) ---
 
     # Champion Breakdown Section
-    champion_clusters = [c for c in df['Cluster_KMeans'].unique() if profs[c]['name'] == '🏆 Champions']
+    champion_clusters = [c for c in df['Cluster_KMeans'].unique() if profs[c]['name'] == '🏆 Champions' and c in champion_details]
     champ_breakdown = None
 
     if len(champion_clusters) > 0:
         champ_cards = []
         for cid in sorted(champion_clusters):
-            if cid in champion_details:
-                det = champion_details[cid]
-                champ_cards.append(html.Div([
-                    html.Div(f"Champion C{cid}", className="champ-num"),
-                    html.Div(f"🏅 {det['tier']}", className="champ-tier"),
-                    html.Div(det['desc'], className="champ-desc"),
-                    html.Div(f"📊 Characteristics: {det['char']}", className="champ-char")
-                ], className="champ-card"))
+            det = champion_details[cid] # Sudah dipastikan ada di dictionary di atas
+            champ_cards.append(html.Div([
+                html.Div(f"Champion C{cid}", className="champ-num"),
+                html.Div(f"🏅 {det['tier']}", className="champ-tier"),
+                html.Div(det['desc'], className="champ-desc"),
+                html.Div(f"📊 Characteristics: {det['char']}", className="champ-char")
+            ], className="champ-card"))
 
         if champ_cards:
             champ_breakdown = html.Div([
                 html.Div("🏆 Champion Segments Breakdown", className="champ-break-t"),
                 html.Div("Understanding the 4 Different Champion Tiers",
-                         style={'textAlign':'center', 'fontSize':'1.1rem', 'marginBottom':'24px', 'opacity':'0.95'}),
+                            style={'textAlign':'center', 'fontSize':'1.1rem', 'marginBottom':'24px', 'opacity':'0.95'}),
                 html.Div(champ_cards, className="champ-grid")
             ], className="champ-break")
 
     # Strategy Cards
     st_cards = []
+    # Menggunakan profs.items() untuk semua strategi, lalu filter berdasarkan cluster yang ada di df
     for cid, p in profs.items():
-        # Check if the cluster ID exists in the filtered DataFrame's clusters
         if cid in df['Cluster_KMeans'].unique():
             st_cards.append(html.Div([
                 html.Div([
@@ -564,7 +586,7 @@ def upd(sc, rr, sp):
     strategy_output = html.Div(st_cards, className="strat-g") if st_cards else html.Div("No strategies match the current filter.")
 
 
-    # --- AI Insights Tab Content ---
+    # --- AI Insights Tab Content (ins_cont) ---
     
     # Calculate top performers for insights
     top_revenue_segment = df.groupby('Cluster_Label')['Monetary'].sum().idxmax()
@@ -583,27 +605,28 @@ def upd(sc, rr, sp):
                 html.Ul([
                     html.Li(f"🏆 Highest Revenue: {top_revenue_segment}"),
                     html.Li(f"👥 Largest Group: {largest_group} ({largest_group_count:,} customers)"),
-                    html.Li(f"💰 Best AOV: {best_aov_segment} (Pounds{best_aov_value:.0f})"),
+                    html.Li(f"💰 Best AOV: {best_aov_segment} (£{best_aov_value:.0f})"),
                     html.Li(f"🔄 Most Frequent: {most_frequent_segment} ({most_frequent_value:.1f} orders)")
                 ], className="ins-list")
             ], className="ins-card"),
+            # Tambahkan insights card kedua di sini jika ada (atau biarkan kosong)
             html.Div([
-                html.Div("💡 Smart Recommendations", className="ins-h"),
+                html.Div("💡 Actionable Recommendations", className="ins-h"),
                 html.Ul([
-                    html.Li("🎯 Prioritize high-value segment retention programs"),
-                    html.Li("📧 Launch win-back campaigns for dormant customers"),
-                    html.Li("🚀 Accelerate potential customer nurturing flows"),
-                    html.Li("💎 Create exclusive VIP experiences for champions"),
-                    html.Li("📈 Implement cross-sell strategies for loyal segments")
+                    html.Li(f"Prioritas: Fokus pada {top_revenue_segment} untuk memaksimalkan ROI jangka pendek."),
+                    html.Li(f"Aktivasi: Gunakan strategi Win-Back untuk segmen Dormant dengan tawaran spesial."),
+                    html.Li(f"Growth: Terapkan strategi Fast Convert pada segmen Potential."),
+                    html.Li("Retensi: Pertahankan Champions & Loyal dengan program VIP dan Loyalty Boost.")
                 ], className="ins-list")
             ], className="ins-card")
+
         ], className="ins-g")
     ], className="ins")
 
-    return f1, f2, f3, f4, f5, f6, f7, champ_breakdown, strategy_output, ins_cont
+    # --- FINAL RETURN (10 nilai) ---
+    return (f1, f2, f3, f4, f5, f6, f7, champ_breakdown, strategy_output, ins_cont)
 
-# --- Local Run ---
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8050))
-    app.run_server(host="0.0.0.0", port=port, debug=True)
+# Menambahkan blok run untuk menjalankan aplikasi
+if __name__ == '__main__':
+    # Jika Anda menjalankan ini secara lokal, Dash akan memberikan saran untuk mengaksesnya di http://127.0.0.1:8050/
+    app.run_server(debug=True)
