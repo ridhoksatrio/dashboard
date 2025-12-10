@@ -1,9 +1,7 @@
-flask
-flask-cors
-pandas
-numpy
-plotly
-dash
-dash-bootstrap-components
-gunicorn
-python-dotenv
+dash==2.14.0
+pandas==2.1.4
+numpy==1.24.4
+plotly==5.17.0
+dash-bootstrap-components==1.5.0
+Flask==2.3.3
+gunicorn==20.1.0
