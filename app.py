@@ -11,10 +11,6 @@ Original file is located at
 🎯 PREMIUM CUSTOMER INTELLIGENCE DASHBOARD
 Ultra Eye-Catching Design with Advanced Visualizations - ENHANCED VERSION
 """
-
-print("🚀 Installing libraries...")
-!pip install dash dash-bootstrap-components plotly pyngrok -q
-
 import pandas as pd, numpy as np, plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import dash
