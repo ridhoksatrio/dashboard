@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 
 # Load & Prepare Data
 try:
-    rfm = pd.read_csv('final_customer_segments (1).csv', index_col=0)
+    rfm = pd.read_csv('final_customer_segments.csv', index_col=0)
 except FileNotFoundError:
     try:
         rfm = pd.read_csv('final_customer_segments.csv', index_col=0)
