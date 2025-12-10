@@ -44,12 +44,22 @@ def load_data():
                     
                     # Cek kolom yang diperlukan
                     required_cols = ['Recency', 'Frequency', 'Monetary', 'AvgOrderValue', 'RFM_Score', 'Cluster_KMeans']
+                    
+                    # Jika ada kolom 'Customer Category', kita bisa gunakan untuk mapping
+                    if 'Customer Category' in df.columns:
+                        print("   Found 'Customer Category' column, mapping to Cluster_KMeans")
+                        category_map = {
+                            'Champion': 1, 'Champions': 1,
+                            'Loyal': 2,
+                            'At Risk': 3,
+                            'Cannot Lose': 4,
+                            'Others': 5, 'Other': 5
+                        }
+                        df['Cluster_KMeans'] = df['Customer Category'].map(category_map).fillna(0).astype(int)
+                    
                     missing_cols = [col for col in required_cols if col not in df.columns]
                     
-                    if not missing_cols:
-                        print("✅ All required columns present")
-                        return df
-                    else:
+                    if missing_cols:
                         print(f"⚠️ Missing columns: {missing_cols}")
                         print("🔄 Creating missing columns...")
                         
@@ -61,13 +71,14 @@ def load_data():
                         if 'Monetary' not in df.columns:
                             df['Monetary'] = np.random.randint(100, 10000, len(df))
                         if 'AvgOrderValue' not in df.columns:
-                            df['AvgOrderValue'] = df['Monetary'] / df['Frequency'].clip(lower=1)
+                            df['AvgOrderValue'] = (df['Monetary'] / df['Frequency']).clip(lower=50, upper=5000)
                         if 'RFM_Score' not in df.columns:
                             df['RFM_Score'] = np.random.randint(1, 10, len(df))
                         if 'Cluster_KMeans' not in df.columns:
                             df['Cluster_KMeans'] = np.random.choice([0, 1, 2, 3, 4, 5, 6], len(df))
-                        
-                        return df
+                    
+                    print("✅ Data preparation complete")
+                    return df
                         
                 except Exception as e:
                     print(f"❌ Error reading {csv_file}: {e}")
@@ -171,15 +182,24 @@ def get_strat(cid, data):
 # Create profiles
 profs = {}
 for c in rfm['Cluster_KMeans'].unique():
-    p = get_strat(c, rfm)
-    profs[c] = p
-    
-    # Add cluster labels and priority (from kode kedua)
-    rfm.loc[rfm['Cluster_KMeans'] == c, 'Cluster_Label'] = f"{p['name'][:2]} {p['name'][2:]} (C{c})"
-    rfm.loc[rfm['Cluster_KMeans'] == c, 'Priority'] = p['priority']
+    try:
+        p = get_strat(c, rfm)
+        profs[c] = p
+        
+        # Add cluster labels and priority (from kode kedua)
+        rfm.loc[rfm['Cluster_KMeans'] == c, 'Cluster_Label'] = f"{p['name'][:2]} {p['name'][2:]} (C{c})"
+        rfm.loc[rfm['Cluster_KMeans'] == c, 'Priority'] = p['priority']
+    except Exception as e:
+        print(f"Error creating profile for cluster {c}: {e}")
+        # Set default
+        rfm.loc[rfm['Cluster_KMeans'] == c, 'Cluster_Label'] = f"Segment {c}"
+        rfm.loc[rfm['Cluster_KMeans'] == c, 'Priority'] = 'MEDIUM'
 
 # Create color mapping (from kode kedua)
-colors = {f"{p['name'][:2]} {p['name'][2:]} (C{c})": p['color'] for c, p in profs.items()}
+colors = {}
+for c, p in profs.items():
+    label = f"{p['name'][:2]} {p['name'][2:]} (C{c})"
+    colors[label] = p['color']
 
 print(f"\n🎯 CLUSTER PROFILES CREATED:")
 for c, p in profs.items():
@@ -321,6 +341,11 @@ body{font-family:'Inter','Poppins',sans-serif;background:linear-gradient(135deg,
 def create_initial_figures(data):
     """Create initial figures for dashboard - optimized version"""
     try:
+        # Pastikan data memiliki kolom Cluster_Label
+        if 'Cluster_Label' not in data.columns:
+            print("⚠️ Warning: Cluster_Label not found, creating default labels")
+            data['Cluster_Label'] = data['Cluster_KMeans'].apply(lambda x: f"Segment {x}")
+        
         # 1. Customer Distribution Pie
         cluster_counts = data['Cluster_Label'].value_counts()
         pie_fig = go.Figure(go.Pie(
@@ -375,22 +400,22 @@ def create_initial_figures(data):
         )
         
         # 3. 3D RFM Analysis
-        sample_data = data.sample(min(500, len(data)))
+        sample_size = min(500, len(data))
         scatter_fig = go.Figure(go.Scatter3d(
-            x=sample_data['Recency'],
-            y=sample_data['Frequency'],
-            z=sample_data['Monetary'],
+            x=data['Recency'].sample(sample_size, random_state=42),
+            y=data['Frequency'].sample(sample_size, random_state=42),
+            z=data['Monetary'].sample(sample_size, random_state=42),
             mode='markers',
             marker=dict(
                 size=7,
-                color=sample_data['Cluster_KMeans'],
+                color=data['Cluster_KMeans'].sample(sample_size, random_state=42),
                 colorscale='Rainbow',
                 showscale=True,
                 line=dict(width=0.8, color='white'),
                 opacity=0.88,
                 colorbar=dict(title='Cluster', thickness=20, len=0.7)
             ),
-            text=sample_data['Cluster_Label'],
+            text=data['Cluster_Label'].sample(sample_size, random_state=42),
             hovertemplate='<b>%{text}</b><br>Recency: %{x}<br>Frequency: %{y}<br>Monetary: £%{z:,.0f}<extra></extra>'
         ))
         scatter_fig.update_layout(
@@ -489,13 +514,19 @@ def create_initial_figures(data):
             margin=dict(t=20, b=20, l=20, r=20)
         )
         
+        print("✅ Initial figures created successfully")
         return [pie_fig, bar_fig, scatter_fig, hist_recency, hist_frequency, hist_monetary, table_fig]
     
     except Exception as e:
-        print(f"Error creating initial figures: {e}")
-        # Return simple empty figures as fallback
+        print(f"❌ Error creating initial figures: {e}")
+        traceback.print_exc()
+        # Create simple empty figures as fallback
         empty_fig = go.Figure()
-        empty_fig.update_layout(title="Error loading figures")
+        empty_fig.update_layout(
+            title={'text': "Error loading figure", 'x': 0.5},
+            height=300,
+            plot_bgcolor='white'
+        )
         return [empty_fig] * 7
 
 # Create initial figures
@@ -743,261 +774,298 @@ def update_all_charts(segment, rfm_range, priority):
             return [empty_fig] * 7 + [empty_message, empty_message, empty_message]
         
         # 1. Customer Distribution Pie
-        cluster_counts = df['Cluster_Label'].value_counts()
-        pie_fig = go.Figure(go.Pie(
-            labels=cluster_counts.index,
-            values=cluster_counts.values,
-            hole=0.68,
-            marker=dict(
-                colors=[colors.get(l, '#95A5A6') for l in cluster_counts.index],
-                line=dict(color='white', width=5)
-            ),
-            textfont=dict(size=14, family='Inter, Poppins', weight=700),
-            textposition='outside',
-            pull=[0.05] * len(cluster_counts)
-        ))
-        pie_fig.update_layout(
-            title={'text': "<b>🎯 Customer Distribution</b>", 'x': 0.5,
-                   'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
-            height=420,
-            annotations=[dict(
-                text=f'<b>{len(df):,}</b><br><span style="font-size:14px">Customers</span>',
-                x=0.5, y=0.5,
-                font={'size': 24, 'color': '#667eea', 'family': 'Inter, Poppins'},
-                showarrow=False
-            )],
-            margin=dict(t=80, b=40, l=40, r=40)
-        )
+        try:
+            cluster_counts = df['Cluster_Label'].value_counts()
+            pie_fig = go.Figure(go.Pie(
+                labels=cluster_counts.index,
+                values=cluster_counts.values,
+                hole=0.68,
+                marker=dict(
+                    colors=[colors.get(l, '#95A5A6') for l in cluster_counts.index],
+                    line=dict(color='white', width=5)
+                ),
+                textfont=dict(size=14, family='Inter, Poppins', weight=700),
+                textposition='outside',
+                pull=[0.05] * len(cluster_counts)
+            ))
+            pie_fig.update_layout(
+                title={'text': "<b>🎯 Customer Distribution</b>", 'x': 0.5,
+                       'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
+                height=420,
+                annotations=[dict(
+                    text=f'<b>{len(df):,}</b><br><span style="font-size:14px">Customers</span>',
+                    x=0.5, y=0.5,
+                    font={'size': 24, 'color': '#667eea', 'family': 'Inter, Poppins'},
+                    showarrow=False
+                )],
+                margin=dict(t=80, b=40, l=40, r=40)
+            )
+        except Exception as e:
+            print(f"Error creating pie chart: {e}")
+            pie_fig = initial_figures[0]
         
         # 2. Revenue by Segment
-        revenue_by_segment = df.groupby('Cluster_Label')['Monetary'].sum().sort_values()
-        bar_fig = go.Figure(go.Bar(
-            x=revenue_by_segment.values,
-            y=revenue_by_segment.index,
-            orientation='h',
-            marker=dict(
-                color=revenue_by_segment.values,
-                colorscale='Sunset',
-                line=dict(color='white', width=3)
-            ),
-            text=[f'£{v/1000:.1f}K' for v in revenue_by_segment.values],
-            textposition='outside',
-            textfont={'size': 13, 'weight': 700, 'family': 'Inter, Poppins'}
-        ))
-        bar_fig.update_layout(
-            title={'text': "<b>💰 Revenue by Segment</b>", 'x': 0.5,
-                   'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
-            xaxis={'title': '<b>Revenue (£)</b>', 'titlefont': {'size': 14, 'family': 'Inter, Poppins'},
-                   'gridcolor': 'rgba(0,0,0,0.05)'},
-            yaxis={'titlefont': {'size': 14, 'family': 'Inter, Poppins'}},
-            height=420,
-            plot_bgcolor='rgba(245,247,250,.6)',
-            margin=dict(t=80, b=60, l=140, r=60)
-        )
+        try:
+            revenue_by_segment = df.groupby('Cluster_Label')['Monetary'].sum().sort_values()
+            bar_fig = go.Figure(go.Bar(
+                x=revenue_by_segment.values,
+                y=revenue_by_segment.index,
+                orientation='h',
+                marker=dict(
+                    color=revenue_by_segment.values,
+                    colorscale='Sunset',
+                    line=dict(color='white', width=3)
+                ),
+                text=[f'£{v/1000:.1f}K' for v in revenue_by_segment.values],
+                textposition='outside',
+                textfont={'size': 13, 'weight': 700, 'family': 'Inter, Poppins'}
+            ))
+            bar_fig.update_layout(
+                title={'text': "<b>💰 Revenue by Segment</b>", 'x': 0.5,
+                       'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
+                xaxis={'title': '<b>Revenue (£)</b>', 'titlefont': {'size': 14, 'family': 'Inter, Poppins'},
+                       'gridcolor': 'rgba(0,0,0,0.05)'},
+                yaxis={'titlefont': {'size': 14, 'family': 'Inter, Poppins'}},
+                height=420,
+                plot_bgcolor='rgba(245,247,250,.6)',
+                margin=dict(t=80, b=60, l=140, r=60)
+            )
+        except Exception as e:
+            print(f"Error creating bar chart: {e}")
+            bar_fig = initial_figures[1]
         
         # 3. 3D RFM Analysis
-        sample_size = min(500, len(df))
-        scatter_fig = go.Figure(go.Scatter3d(
-            x=df['Recency'].sample(sample_size, random_state=42),
-            y=df['Frequency'].sample(sample_size, random_state=42),
-            z=df['Monetary'].sample(sample_size, random_state=42),
-            mode='markers',
-            marker=dict(
-                size=7,
-                color=df['Cluster_KMeans'].sample(sample_size, random_state=42),
-                colorscale='Rainbow',
-                showscale=True,
-                line=dict(width=0.8, color='white'),
-                opacity=0.88,
-                colorbar=dict(title='Cluster', thickness=20, len=0.7)
-            ),
-            text=df['Cluster_Label'].sample(sample_size, random_state=42),
-            hovertemplate='<b>%{text}</b><br>Recency: %{x}<br>Frequency: %{y}<br>Monetary: £%{z:,.0f}<extra></extra>'
-        ))
-        scatter_fig.update_layout(
-            title={'text': "<b>📈 3D RFM Customer Analysis</b>", 'x': 0.5,
-                   'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
-            height=650,
-            scene=dict(
-                xaxis=dict(
-                    title='<b>Recency (days)</b>',
-                    backgroundcolor='rgba(245,247,250,.4)',
-                    gridcolor='rgba(0,0,0,0.08)'
+        try:
+            sample_size = min(500, len(df))
+            scatter_fig = go.Figure(go.Scatter3d(
+                x=df['Recency'].sample(sample_size, random_state=42),
+                y=df['Frequency'].sample(sample_size, random_state=42),
+                z=df['Monetary'].sample(sample_size, random_state=42),
+                mode='markers',
+                marker=dict(
+                    size=7,
+                    color=df['Cluster_KMeans'].sample(sample_size, random_state=42),
+                    colorscale='Rainbow',
+                    showscale=True,
+                    line=dict(width=0.8, color='white'),
+                    opacity=0.88,
+                    colorbar=dict(title='Cluster', thickness=20, len=0.7)
                 ),
-                yaxis=dict(
-                    title='<b>Frequency</b>',
-                    backgroundcolor='rgba(245,247,250,.4)',
-                    gridcolor='rgba(0,0,0,0.08)'
+                text=df['Cluster_Label'].sample(sample_size, random_state=42),
+                hovertemplate='<b>%{text}</b><br>Recency: %{x}<br>Frequency: %{y}<br>Monetary: £%{z:,.0f}<extra></extra>'
+            ))
+            scatter_fig.update_layout(
+                title={'text': "<b>📈 3D RFM Customer Analysis</b>", 'x': 0.5,
+                       'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
+                height=650,
+                scene=dict(
+                    xaxis=dict(
+                        title='<b>Recency (days)</b>',
+                        backgroundcolor='rgba(245,247,250,.4)',
+                        gridcolor='rgba(0,0,0,0.08)'
+                    ),
+                    yaxis=dict(
+                        title='<b>Frequency</b>',
+                        backgroundcolor='rgba(245,247,250,.4)',
+                        gridcolor='rgba(0,0,0,0.08)'
+                    ),
+                    zaxis=dict(
+                        title='<b>Monetary (£)</b>',
+                        backgroundcolor='rgba(245,247,250,.4)',
+                        gridcolor='rgba(0,0,0,0.08)'
+                    ),
+                    camera=dict(eye=dict(x=1.5, y=1.5, z=1.3))
                 ),
-                zaxis=dict(
-                    title='<b>Monetary (£)</b>',
-                    backgroundcolor='rgba(245,247,250,.4)',
-                    gridcolor='rgba(0,0,0,0.08)'
-                ),
-                camera=dict(eye=dict(x=1.5, y=1.5, z=1.3))
-            ),
-            paper_bgcolor='rgba(245,247,250,.4)',
-            margin=dict(t=80, b=40, l=40, r=40)
-        )
+                paper_bgcolor='rgba(245,247,250,.4)',
+                margin=dict(t=80, b=40, l=40, r=40)
+            )
+        except Exception as e:
+            print(f"Error creating 3D scatter: {e}")
+            scatter_fig = initial_figures[2]
         
         # 4-6. Histograms
-        def create_histogram(col, title, color):
-            fig = go.Figure(go.Histogram(
-                x=df[col],
-                nbinsx=35,
-                marker=dict(
-                    color=color,
-                    line=dict(color='white', width=2),
-                    opacity=0.85
+        def create_histogram(col, title, color, default_fig_index):
+            try:
+                fig = go.Figure(go.Histogram(
+                    x=df[col],
+                    nbinsx=35,
+                    marker=dict(
+                        color=color,
+                        line=dict(color='white', width=2),
+                        opacity=0.85
+                    )
+                ))
+                fig.update_layout(
+                    title={'text': f"<b>{title}</b>", 'x': 0.5,
+                           'font': {'size': 18, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
+                    xaxis={'title': f'<b>{col}</b>', 'titlefont': {'size': 13, 'family': 'Inter, Poppins'},
+                           'gridcolor': 'rgba(0,0,0,0.05)'},
+                    yaxis={'title': '<b>Count</b>', 'titlefont': {'size': 13, 'family': 'Inter, Poppins'},
+                           'gridcolor': 'rgba(0,0,0,0.05)'},
+                    height=340,
+                    plot_bgcolor='rgba(245,247,250,.5)',
+                    margin=dict(t=70, b=50, l=60, r=40)
                 )
-            ))
-            fig.update_layout(
-                title={'text': f"<b>{title}</b>", 'x': 0.5,
-                       'font': {'size': 18, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
-                xaxis={'title': f'<b>{col}</b>', 'titlefont': {'size': 13, 'family': 'Inter, Poppins'},
-                       'gridcolor': 'rgba(0,0,0,0.05)'},
-                yaxis={'title': '<b>Count</b>', 'titlefont': {'size': 13, 'family': 'Inter, Poppins'},
-                       'gridcolor': 'rgba(0,0,0,0.05)'},
-                height=340,
-                plot_bgcolor='rgba(245,247,250,.5)',
-                margin=dict(t=70, b=50, l=60, r=40)
-            )
-            return fig
+                return fig
+            except Exception as e:
+                print(f"Error creating histogram for {col}: {e}")
+                return initial_figures[default_fig_index]
         
-        hist_recency = create_histogram('Recency', '⏰ Recency Distribution', '#ff6b6b')
-        hist_frequency = create_histogram('Frequency', '🔄 Frequency Distribution', '#4ecdc4')
-        hist_monetary = create_histogram('Monetary', '💵 Monetary Distribution', '#45b7d1')
+        hist_recency = create_histogram('Recency', '⏰ Recency Distribution', '#ff6b6b', 3)
+        hist_frequency = create_histogram('Frequency', '🔄 Frequency Distribution', '#4ecdc4', 4)
+        hist_monetary = create_histogram('Monetary', '💵 Monetary Distribution', '#45b7d1', 5)
         
         # 7. Segment Summary Table
-        summary = df.groupby('Cluster_Label').agg({
-            'Recency': 'mean',
-            'Frequency': 'mean',
-            'Monetary': 'mean',
-            'AvgOrderValue': 'mean',
-            'RFM_Score': 'mean'
-        }).round(1).reset_index()
-        summary['Count'] = df.groupby('Cluster_Label').size().values
-        
-        table_fig = go.Figure(data=[go.Table(
-            header=dict(
-                values=['<b>Segment</b>', '<b>Count</b>', '<b>Recency</b>', '<b>Frequency</b>',
-                       '<b>Monetary</b>', '<b>Avg Order</b>', '<b>RFM Score</b>'],
-                fill_color='#667eea',
-                font=dict(color='white', size=13, family='Inter, Poppins'),
-                align='center',
-                height=42,
-                line=dict(color='white', width=2)
-            ),
-            cells=dict(
-                values=[
-                    summary['Cluster_Label'],
-                    summary['Count'],
-                    [f"{v:.0f}d" for v in summary['Recency']],
-                    summary['Frequency'].round(1),
-                    [f"£{v:,.0f}" for v in summary['Monetary']],
-                    [f"£{v:.0f}" for v in summary['AvgOrderValue']],
-                    summary['RFM_Score']
-                ],
-                fill_color=[['white', '#f8f9fc'] * len(summary)],
-                align='center',
-                font={'size': 12, 'family': 'Inter, Poppins'},
-                height=38,
-                line=dict(color='#e0e0e0', width=1)
+        try:
+            summary = df.groupby('Cluster_Label').agg({
+                'Recency': 'mean',
+                'Frequency': 'mean',
+                'Monetary': 'mean',
+                'AvgOrderValue': 'mean',
+                'RFM_Score': 'mean'
+            }).round(1).reset_index()
+            summary['Count'] = df.groupby('Cluster_Label').size().values
+            
+            table_fig = go.Figure(data=[go.Table(
+                header=dict(
+                    values=['<b>Segment</b>', '<b>Count</b>', '<b>Recency</b>', '<b>Frequency</b>',
+                           '<b>Monetary</b>', '<b>Avg Order</b>', '<b>RFM Score</b>'],
+                    fill_color='#667eea',
+                    font=dict(color='white', size=13, family='Inter, Poppins'),
+                    align='center',
+                    height=42,
+                    line=dict(color='white', width=2)
+                ),
+                cells=dict(
+                    values=[
+                        summary['Cluster_Label'],
+                        summary['Count'],
+                        [f"{v:.0f}d" for v in summary['Recency']],
+                        summary['Frequency'].round(1),
+                        [f"£{v:,.0f}" for v in summary['Monetary']],
+                        [f"£{v:.0f}" for v in summary['AvgOrderValue']],
+                        summary['RFM_Score']
+                    ],
+                    fill_color=[['white', '#f8f9fc'] * len(summary)],
+                    align='center',
+                    font={'size': 12, 'family': 'Inter, Poppins'},
+                    height=38,
+                    line=dict(color='#e0e0e0', width=1)
+                )
+            )])
+            table_fig.update_layout(
+                height=380,
+                margin=dict(t=20, b=20, l=20, r=20)
             )
-        )])
-        table_fig.update_layout(
-            height=380,
-            margin=dict(t=20, b=20, l=20, r=20)
-        )
+        except Exception as e:
+            print(f"Error creating table: {e}")
+            table_fig = initial_figures[6]
         
         # 8. Champion Breakdown
-        champion_clusters = [c for c in df['Cluster_KMeans'].unique() 
-                           if c in profs and profs[c]['name'] == '🏆 Champions']
-        
         champion_breakdown = None
-        if champion_clusters:
-            champ_cards = []
-            for cid in sorted(champion_clusters):
-                if cid in champion_details:
-                    detail = champion_details[cid]
-                    count = len(df[df['Cluster_KMeans'] == cid])
-                    champ_cards.append(html.Div([
-                        html.Div(f"Champion C{cid}", className="champ-num"),
-                        html.Div(f"🏅 {detail['tier']}", className="champ-tier"),
-                        html.Div(detail['desc'], className="champ-desc"),
-                        html.Div(f"📊 Characteristics: {detail['char']}", className="champ-char")
-                    ], className="champ-card"))
+        try:
+            champion_clusters = [c for c in df['Cluster_KMeans'].unique() 
+                               if c in profs and profs[c]['name'] == '🏆 Champions']
             
-            if champ_cards:
-                champion_breakdown = html.Div([
-                    html.Div("🏆 Champion Segments Breakdown", className="champ-break-t"),
-                    html.Div("Understanding the 4 Different Champion Tiers",
-                            style={'textAlign': 'center', 'fontSize': '1.1rem', 'marginBottom': '24px', 'opacity': '0.95'}),
-                    html.Div(champ_cards, className="champ-grid")
-                ], className="champ-break")
+            if champion_clusters:
+                champ_cards = []
+                for cid in sorted(champion_clusters):
+                    if cid in champion_details:
+                        detail = champion_details[cid]
+                        count = len(df[df['Cluster_KMeans'] == cid])
+                        champ_cards.append(html.Div([
+                            html.Div(f"Champion C{cid}", className="champ-num"),
+                            html.Div(f"🏅 {detail['tier']}", className="champ-tier"),
+                            html.Div(detail['desc'], className="champ-desc"),
+                            html.Div(f"📊 Characteristics: {detail['char']}", className="champ-char")
+                        ], className="champ-card"))
+                
+                if champ_cards:
+                    champion_breakdown = html.Div([
+                        html.Div("🏆 Champion Segments Breakdown", className="champ-break-t"),
+                        html.Div("Understanding the 4 Different Champion Tiers",
+                                style={'textAlign': 'center', 'fontSize': '1.1rem', 'marginBottom': '24px', 'opacity': '0.95'}),
+                        html.Div(champ_cards, className="champ-grid")
+                    ], className="champ-break")
+        except Exception as e:
+            print(f"Error creating champion breakdown: {e}")
+            champion_breakdown = html.Div([
+                html.H4("Champion breakdown not available", style={'textAlign': 'center', 'color': '#ff6b6b'})
+            ])
         
         # 9. Strategy Cards
         strategy_cards = []
-        for cid, strat in profs.items():
-            if segment == 'all' or segment == cid:
-                customer_count = len(df[df['Cluster_KMeans'] == cid])
-                if customer_count > 0:
-                    strategy_cards.append(html.Div([
-                        html.Div([
-                            html.Div(strat['name'], className="strat-name"),
-                            html.Div(strat['priority'], className="pri-badge")
-                        ], className="strat-hdr"),
-                        
-                        html.Div(f"📋 {strat['strategy']} Strategy", className="strat-sub"),
-                        
-                        html.Div([
-                            html.Div("🎯 Key Tactics", className="tact-t"),
-                            *[html.Div(t, className="tact") for t in strat['tactics']]
-                        ], className="tactics"),
-                        
-                        html.Div([
-                            html.Div("📊 Target KPIs", className="tact-t"),
-                            html.Div([html.Div(k, className="kpi") for k in strat['kpis']], className="kpi-g")
-                        ], className="tactics"),
-                        
-                        html.Div([
+        try:
+            for cid, strat in profs.items():
+                if segment == 'all' or segment == cid:
+                    customer_count = len(df[df['Cluster_KMeans'] == cid])
+                    if customer_count > 0:
+                        strategy_cards.append(html.Div([
                             html.Div([
-                                html.Div("Budget Allocation", className="budget-l"),
-                                html.Div(strat['budget'], className="budget-v")
-                            ]),
+                                html.Div(strat['name'], className="strat-name"),
+                                html.Div(strat['priority'], className="pri-badge")
+                            ], className="strat-hdr"),
+                            
+                            html.Div(f"📋 {strat['strategy']} Strategy", className="strat-sub"),
+                            
                             html.Div([
-                                html.Div("ROI Target", className="budget-l"),
-                                html.Div(strat['roi'], className="budget-v")
-                            ])
-                        ], className="budget")
-                    ], className="strat", style={'background': strat['grad']}))
+                                html.Div("🎯 Key Tactics", className="tact-t"),
+                                *[html.Div(t, className="tact") for t in strat['tactics']]
+                            ], className="tactics"),
+                            
+                            html.Div([
+                                html.Div("📊 Target KPIs", className="tact-t"),
+                                html.Div([html.Div(k, className="kpi") for k in strat['kpis']], className="kpi-g")
+                            ], className="tactics"),
+                            
+                            html.Div([
+                                html.Div([
+                                    html.Div("Budget Allocation", className="budget-l"),
+                                    html.Div(strat['budget'], className="budget-v")
+                                ]),
+                                html.Div([
+                                    html.Div("ROI Target", className="budget-l"),
+                                    html.Div(strat['roi'], className="budget-v")
+                                ])
+                            ], className="budget")
+                        ], className="strat", style={'background': strat['grad']}))
+        except Exception as e:
+            print(f"Error creating strategy cards: {e}")
+            strategy_cards = [html.Div("Strategy cards not available", 
+                                      style={'textAlign': 'center', 'padding': '50px', 'color': '#667eea'})]
         
         # 10. AI Insights
-        insights = html.Div([
-            html.Div("🧠 AI-Powered Insights & Recommendations", className="ins-t"),
-            html.Div([
+        try:
+            insights = html.Div([
+                html.Div("🧠 AI-Powered Insights & Recommendations", className="ins-t"),
                 html.Div([
-                    html.Div("📊 Top Performers", className="ins-h"),
-                    html.Ul([
-                        html.Li(f"🏆 Highest Revenue: {df.groupby('Cluster_Label')['Monetary'].sum().idxmax()}"),
-                        html.Li(f"👥 Largest Group: {df['Cluster_Label'].value_counts().idxmax()} ({df['Cluster_Label'].value_counts().max():,} customers)"),
-                        html.Li(f"💰 Best AOV: {df.groupby('Cluster_Label')['AvgOrderValue'].mean().idxmax()} (£{df.groupby('Cluster_Label')['AvgOrderValue'].mean().max():.0f})"),
-                        html.Li(f"🔄 Most Frequent: {df.groupby('Cluster_Label')['Frequency'].mean().idxmax()} ({df.groupby('Cluster_Label')['Frequency'].mean().max():.1f} orders)")
-                    ], className="ins-list")
-                ], className="ins-card"),
-                
-                html.Div([
-                    html.Div("💡 Smart Recommendations", className="ins-h"),
-                    html.Ul([
-                        html.Li("🎯 Prioritize high-value segment retention programs"),
-                        html.Li("📧 Launch win-back campaigns for dormant customers"),
-                        html.Li("🚀 Accelerate potential customer nurturing flows"),
-                        html.Li("💎 Create exclusive VIP experiences for champions"),
-                        html.Li("📈 Implement cross-sell strategies for loyal segments")
-                    ], className="ins-list")
-                ], className="ins-card")
-            ], className="ins-g")
-        ], className="ins")
+                    html.Div([
+                        html.Div("📊 Top Performers", className="ins-h"),
+                        html.Ul([
+                            html.Li(f"🏆 Highest Revenue: {df.groupby('Cluster_Label')['Monetary'].sum().idxmax()}"),
+                            html.Li(f"👥 Largest Group: {df['Cluster_Label'].value_counts().idxmax()} ({df['Cluster_Label'].value_counts().max():,} customers)"),
+                            html.Li(f"💰 Best AOV: {df.groupby('Cluster_Label')['AvgOrderValue'].mean().idxmax()} (£{df.groupby('Cluster_Label')['AvgOrderValue'].mean().max():.0f})"),
+                            html.Li(f"🔄 Most Frequent: {df.groupby('Cluster_Label')['Frequency'].mean().idxmax()} ({df.groupby('Cluster_Label')['Frequency'].mean().max():.1f} orders)")
+                        ], className="ins-list")
+                    ], className="ins-card"),
+                    
+                    html.Div([
+                        html.Div("💡 Smart Recommendations", className="ins-h"),
+                        html.Ul([
+                            html.Li("🎯 Prioritize high-value segment retention programs"),
+                            html.Li("📧 Launch win-back campaigns for dormant customers"),
+                            html.Li("🚀 Accelerate potential customer nurturing flows"),
+                            html.Li("💎 Create exclusive VIP experiences for champions"),
+                            html.Li("📈 Implement cross-sell strategies for loyal segments")
+                        ], className="ins-list")
+                    ], className="ins-card")
+                ], className="ins-g")
+            ], className="ins")
+        except Exception as e:
+            print(f"Error creating insights: {e}")
+            insights = html.Div([
+                html.H4("Insights not available", style={'textAlign': 'center', 'color': '#667eea'})
+            ])
         
         print("✅ All charts updated successfully")
         return [pie_fig, bar_fig, scatter_fig, hist_recency, hist_frequency, 
