@@ -1,66 +1,25 @@
-import os
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import dash
-from dash import dcc, html, Input, Output
-import dash_bootstrap_components as dbc
+import streamlit as st
+import warnings
+warnings.filterwarnings('ignore')
 
-# Load & Prepare Data
-try: 
-    rfm = pd.read_csv('final_customer_segments (1).csv', index_col=0)
-except: 
-    rfm = pd.read_csv('final_customer_segments.csv', index_col=0)
-print(f"✅ {len(rfm):,} customers loaded")
+# Set page configuration
+st.set_page_config(
+    page_title="Customer Intelligence Hub",
+    page_icon="🎯",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# Cluster Strategies
-strats = {
-    'champions': {'name':'🏆 Champions','grad':'linear-gradient(135deg,#FFD700,#FFA500)','color':'#FFD700','priority':'CRITICAL','strategy':'VIP Platinum','tactics':['💎 Exclusive Early Access','🎁 Premium Gifts','📞 24/7 Manager','🌟 VIP Events','✨ Celebrations'],'kpis':['Retention>95%','Upsell>40%','Referral>30%'],'budget':'30%','roi':'500%'},
-    'loyal': {'name':'💎 Loyal','grad':'linear-gradient(135deg,#667eea,#764ba2)','color':'#667eea','priority':'HIGH','strategy':'Loyalty Boost','tactics':['🎯 Tiered Rewards','📱 App Benefits','🎉 Birthday Offers','💝 Referral Bonus','🔔 Flash Access'],'kpis':['Retention>85%','Frequency+20%','NPS>8'],'budget':'25%','roi':'380%'},
-    'big': {'name':'💰 Big Spenders','grad':'linear-gradient(135deg,#f093fb,#f5576c)','color':'#f093fb','priority':'CRITICAL','strategy':'Value Max','tactics':['💳 Flex Terms','🎁 Luxury Gifts','🚚 Free Express','📦 Custom Bundles','🌟 Concierge'],'kpis':['AOV+15%','Retention>90%','Sat>4.8/5'],'budget':'20%','roi':'420%'},
-    'dormant': {'name':'😴 Dormant','grad':'linear-gradient(135deg,#ff6b6b,#ee5a6f)','color':'#ff6b6b','priority':'URGENT','strategy':'Win-Back','tactics':['🎁 25-30% Off','📧 Multi-Channel','🎯 Retargeting','💬 Personal Call','⏰ Urgency'],'kpis':['Winback>25%','Response>15%','ROI>200%'],'budget':'15%','roi':'250%'},
-    'potential': {'name':'🌱 Potential','grad':'linear-gradient(135deg,#11998e,#38ef7d)','color':'#11998e','priority':'MEDIUM','strategy':'Fast Convert','tactics':['🎓 Education','🎁 15% 2nd Buy','💌 Welcome Flow','📚 Tutorials','🎯 Cross-Sell'],'kpis':['Convert>35%','2nd<30d','LTV+25%'],'budget':'5%','roi':'180%'},
-    'standard': {'name':'📊 Standard','grad':'linear-gradient(135deg,#89f7fe,#66a6ff)','color':'#89f7fe','priority':'MEDIUM','strategy':'Steady Engage','tactics':['📧 Newsletters','🎯 Seasonal','💌 AI Recs','🎁 Surprises','📱 Community'],'kpis':['Engage>40%','Stable','Sat>3.5/5'],'budget':'5%','roi':'150%'}
-}
-
-# Champion Sub-segments Explanation
-champion_details = {
-    1: {'tier':'Platinum Elite','desc':'Super frequent buyers with highest engagement','char':'11d recency, 15.6 orders, £5,425 spend'},
-    3: {'tier':'Ultra VIP','desc':'Extreme high-value with massive order frequency','char':'8d recency, 38.9 orders, £40,942 spend'},
-    4: {'tier':'Gold Tier','desc':'Consistent champions with solid performance','char':'1d recency, 10.9 orders, £3,981 spend'},
-    6: {'tier':'Diamond Elite','desc':'Ultra frequent buyers with exceptional loyalty','char':'1d recency, 126.8 orders, £33,796 spend'}
-}
-
-def get_strat(cid,data):
-    cd=data[data['Cluster_KMeans']==cid]
-    r,f,m=cd['Recency'].mean(),cd['Frequency'].mean(),cd['Monetary'].mean()
-    if r<50 and f>10 and m>1000: s='champions'
-    elif r<50 and f>5: s='loyal'
-    elif m>1500: s='big'
-    elif r>100: s='dormant'
-    elif r<50 and f<5: s='potential'
-    else: s='standard'
-    return {**strats[s],'cluster_id':cid}
-
-profs={}
-for c in rfm['Cluster_KMeans'].unique():
-    p=get_strat(c,rfm)
-    profs[c]=p
-    rfm.loc[rfm['Cluster_KMeans']==c,'Cluster_Label']=f"{p['name'][:2]} {p['name'][2:]} (C{c})"
-    rfm.loc[rfm['Cluster_KMeans']==c,'Priority']=p['priority']
-
-colors={f"{p['name'][:2]} {p['name'][2:]} (C{c})":p['color'] for c,p in profs.items()}
-
-app=dash.Dash(__name__,external_stylesheets=[dbc.themes.BOOTSTRAP])
-
-app.index_string='''<!DOCTYPE html><html><head>{%metas%}<title>Customer Intelligence Dashboard</title>{%css%}
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+# Custom CSS
+st.markdown("""
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter','Poppins',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f093fb 100%);padding:16px;min-height:100vh}
-.dash{background:rgba(255,255,255,0.98);border-radius:32px;padding:40px;box-shadow:0 40px 100px rgba(0,0,0,0.4);animation:fadeIn .8s ease-out}
+body{font-family:'Inter','Poppins',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f093fb 100%)}
+.stApp{background:rgba(255,255,255,0.98);border-radius:32px;padding:40px;box-shadow:0 40px 100px rgba(0,0,0,0.4);animation:fadeIn .8s ease-out}
 @keyframes fadeIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
 
 /* HEADER */
@@ -85,25 +44,16 @@ body{font-family:'Inter','Poppins',sans-serif;background:linear-gradient(135deg,
 /* FILTERS */
 .filt{background:linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%);border-radius:22px;padding:32px;margin-bottom:32px;box-shadow:0 10px 30px rgba(0,0,0,.12)}
 .filt-t{font-size:1.6rem;font-weight:800;color:#2c3e50;margin-bottom:22px;display:flex;align-items:center;gap:12px}
-.filt-g{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-.filt-g label{display:block;font-weight:700;color:#34495e;margin-bottom:8px;font-size:1rem;letter-spacing:0.3px}
-.Select-control,.rc-slider{border-radius:12px !important}
 
 /* TABS */
 .tab-content{padding:28px 0}
-.nav-tabs{border:none;gap:12px;margin-bottom:28px}
-.nav-tabs .nav-link{border:none;border-radius:16px;padding:14px 32px;font-weight:700;font-size:1.1rem;color:#667eea;background:#f8f9fa;transition:all .3s;letter-spacing:0.5px}
-.nav-tabs .nav-link:hover{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;transform:translateY(-3px);box-shadow:0 8px 20px rgba(102,126,234,.35)}
-.nav-tabs .nav-link.active{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;box-shadow:0 8px 20px rgba(102,126,234,.4)}
 
 /* CHARTS */
-.charts{display:grid;grid-template-columns:repeat(2,1fr);gap:26px;margin-bottom:26px}
-.chart{background:#fff;border-radius:24px;padding:32px;box-shadow:0 10px 35px rgba(0,0,0,.08);transition:all .35s ease;border:3px solid transparent}
+.chart{background:#fff;border-radius:24px;padding:32px;box-shadow:0 10px 35px rgba(0,0,0,.08);transition:all .35s ease;border:3px solid transparent;margin-bottom:26px}
 .chart:hover{transform:translateY(-6px);box-shadow:0 20px 50px rgba(0,0,0,.15);border-color:#667eea}
-.chart-full{grid-column:1/-1}
 
 /* STRATEGY CARDS */
-.strat-g{display:grid;grid-template-columns:repeat(2,1fr);gap:26px}
+.strat-g{display:grid;grid-template-columns:repeat(2,1fr);gap:26px;margin-bottom:26px}
 .strat{border-radius:24px;padding:36px 32px;color:#fff;box-shadow:0 15px 40px rgba(0,0,0,.22);transition:all .45s cubic-bezier(0.4,0,0.2,1);position:relative;overflow:hidden}
 .strat::after{content:'';position:absolute;bottom:-50px;right:-50px;width:200px;height:200px;background:rgba(255,255,255,.12);border-radius:50%;transition:.6s ease}
 .strat:hover{transform:translateY(-8px) scale(1.03);box-shadow:0 25px 60px rgba(0,0,0,.32)}
@@ -146,271 +96,449 @@ body{font-family:'Inter','Poppins',sans-serif;background:linear-gradient(135deg,
 .ins-list li{padding:10px 0;border-bottom:1px solid rgba(255,255,255,.25);font-size:1.02rem;font-weight:500;letter-spacing:0.2px}
 .ins-list li:last-child{border-bottom:none}
 
-/* FOOTER */
-.foot{text-align:center;margin-top:50px;padding:26px;border-top:4px solid #667eea;color:#7f8c8d;font-size:1.05rem;font-weight:600;letter-spacing:0.5px}
-
 /* RESPONSIVE */
 @media(max-width:1200px){
-    .metrics,.charts,.strat-g,.ins-g{grid-template-columns:repeat(2,1fr)}
-    .filt-g{grid-template-columns:1fr}
+    .metrics,.strat-g,.ins-g{grid-template-columns:repeat(2,1fr)}
     .chart-full{grid-column:1/-1}
 }
 @media(max-width:768px){
-    .metrics,.charts,.strat-g,.ins-g{grid-template-columns:1fr}
+    .metrics,.strat-g,.ins-g{grid-template-columns:1fr}
     .title{font-size:2.8rem}
-    .dash{padding:24px}
 }
-</style></head><body>{%app_entry%}{%config%}{%scripts%}{%renderer%}</body></html>'''
+</style>
+""", unsafe_allow_html=True)
 
-app.layout=html.Div([html.Div([
-    html.Div([html.H1("🎯 Customer Intelligence Hub",className="title"),
-              html.P("Customer Segmentation for Personalized Retail Marketing",className="sub")],className="hdr"),
+# Load & Prepare Data
+@st.cache_data
+def load_data():
+    try:
+        rfm = pd.read_csv('final_customer_segments (1).csv', index_col=0)
+    except:
+        rfm = pd.read_csv('final_customer_segments.csv', index_col=0)
+    return rfm
 
-    html.Div([
-        html.Div([html.Div("👥",className="met-icon"),html.Div(f"{len(rfm):,}",className="met-val"),
-                  html.Div("Customers",className="met-lbl"),html.Div("Active Database",className="met-sub")],className="met"),
-        html.Div([html.Div("🎯",className="met-icon"),html.Div(f"{rfm['Cluster_KMeans'].nunique()}",className="met-val"),
-                  html.Div("Segments",className="met-lbl"),html.Div("AI-Classified",className="met-sub")],className="met"),
-        html.Div([html.Div("💰",className="met-icon"),html.Div(f"£{rfm['Monetary'].sum()/1e6:.2f}M",className="met-val"),
-                  html.Div("Revenue",className="met-lbl"),html.Div(f"Avg £{rfm['Monetary'].mean():.0f}",className="met-sub")],className="met"),
-        html.Div([html.Div("📈",className="met-icon"),html.Div(f"£{rfm['AvgOrderValue'].mean():.0f}",className="met-val"),
-                  html.Div("Avg Order",className="met-lbl"),html.Div(f"Peak £{rfm['AvgOrderValue'].max():.0f}",className="met-sub")],className="met")
-    ],className="metrics"),
+rfm = load_data()
 
-    html.Div([
-        html.Div("🎛️ Smart Filters",className="filt-t"),
-        html.Div([
-            html.Div([html.Label("🎨 Segment Filter"),
-                      dcc.Dropdown(id='cf',
-                                  options=[{'label':'🌐 All Segments','value':'all'}]+
-                                  [{'label':f"{p['name']} - {champion_details[c]['tier']}" if p['name']=='🏆 Champions' and c in champion_details else p['name'],
-                                    'value':c} for c,p in profs.items()],
-                                  value='all',clearable=False,
-                                  style={'borderRadius':'12px'})]),
-            html.Div([html.Label("📊 RFM Score Range"),
-                      dcc.RangeSlider(id='rf',
-                                     min=int(rfm['RFM_Score'].min()),
-                                     max=int(rfm['RFM_Score'].max()),
-                                     value=[int(rfm['RFM_Score'].min()),int(rfm['RFM_Score'].max())],
-                                     marks={i:{'label':str(i),'style':{'fontWeight':'600'}}
-                                           for i in range(int(rfm['RFM_Score'].min()),int(rfm['RFM_Score'].max())+1,2)},
-                                     tooltip={'placement':'bottom','always_visible':False})]),
-            html.Div([html.Label("🔥 Priority Level"),
-                      dcc.Dropdown(id='pf',
-                                  options=[{'label':'🌐 All Priorities','value':'all'},
-                                          {'label':'🔴 CRITICAL','value':'CRITICAL'},
-                                          {'label':'🔥 URGENT','value':'URGENT'},
-                                          {'label':'⚡ HIGH','value':'HIGH'},
-                                          {'label':'📊 MEDIUM','value':'MEDIUM'}],
-                                  value='all',clearable=False,
-                                  style={'borderRadius':'12px'})])
-        ],className="filt-g")
-    ],className="filt"),
+# Cluster Strategies
+strats = {
+    'champions': {'name':'🏆 Champions','grad':'linear-gradient(135deg,#FFD700,#FFA500)','color':'#FFD700','priority':'CRITICAL','strategy':'VIP Platinum','tactics':['💎 Exclusive Early Access','🎁 Premium Gifts','📞 24/7 Manager','🌟 VIP Events','✨ Celebrations'],'kpis':['Retention>95%','Upsell>40%','Referral>30%'],'budget':'30%','roi':'500%'},
+    'loyal': {'name':'💎 Loyal','grad':'linear-gradient(135deg,#667eea,#764ba2)','color':'#667eea','priority':'HIGH','strategy':'Loyalty Boost','tactics':['🎯 Tiered Rewards','📱 App Benefits','🎉 Birthday Offers','💝 Referral Bonus','🔔 Flash Access'],'kpis':['Retention>85%','Frequency+20%','NPS>8'],'budget':'25%','roi':'380%'},
+    'big': {'name':'💰 Big Spenders','grad':'linear-gradient(135deg,#f093fb,#f5576c)','color':'#f093fb','priority':'CRITICAL','strategy':'Value Max','tactics':['💳 Flex Terms','🎁 Luxury Gifts','🚚 Free Express','📦 Custom Bundles','🌟 Concierge'],'kpis':['AOV+15%','Retention>90%','Sat>4.8/5'],'budget':'20%','roi':'420%'},
+    'dormant': {'name':'😴 Dormant','grad':'linear-gradient(135deg,#ff6b6b,#ee5a6f)','color':'#ff6b6b','priority':'URGENT','strategy':'Win-Back','tactics':['🎁 25-30% Off','📧 Multi-Channel','🎯 Retargeting','💬 Personal Call','⏰ Urgency'],'kpis':['Winback>25%','Response>15%','ROI>200%'],'budget':'15%','roi':'250%'},
+    'potential': {'name':'🌱 Potential','grad':'linear-gradient(135deg,#11998e,#38ef7d)','color':'#11998e','priority':'MEDIUM','strategy':'Fast Convert','tactics':['🎓 Education','🎁 15% 2nd Buy','💌 Welcome Flow','📚 Tutorials','🎯 Cross-Sell'],'kpis':['Convert>35%','2nd<30d','LTV+25%'],'budget':'5%','roi':'180%'},
+    'standard': {'name':'📊 Standard','grad':'linear-gradient(135deg,#89f7fe,#66a6ff)','color':'#89f7fe','priority':'MEDIUM','strategy':'Steady Engage','tactics':['📧 Newsletters','🎯 Seasonal','💌 AI Recs','🎁 Surprises','📱 Community'],'kpis':['Engage>40%','Stable','Sat>3.5/5'],'budget':'5%','roi':'150%'}
+}
 
-    dbc.Tabs([
-        dbc.Tab(label="📊 Analytics Dashboard",children=[html.Div([
-            html.Div([
-                html.Div([dcc.Graph(id='g1',config={'displayModeBar':False})],className="chart"),
-                html.Div([dcc.Graph(id='g2',config={'displayModeBar':False})],className="chart")
-            ],className="charts"),
-            html.Div([dcc.Graph(id='g3',config={'displayModeBar':False})],className="chart chart-full"),
-            html.Div([
-                html.Div([dcc.Graph(id='g4',config={'displayModeBar':False})],className="chart"),
-                html.Div([dcc.Graph(id='g5',config={'displayModeBar':False})],className="chart"),
-                html.Div([dcc.Graph(id='g6',config={'displayModeBar':False})],className="chart")
-            ],style={'display':'grid','grid-template-columns':'repeat(3,1fr)','gap':'26px','margin-bottom':'26px'}),
-            html.Div([dcc.Graph(id='g7',config={'displayModeBar':False})],className="chart chart-full")
-        ],className="tab-content")]),
+# Champion Sub-segments Explanation
+champion_details = {
+    1: {'tier':'Platinum Elite','desc':'Super frequent buyers with highest engagement','char':'11d recency, 15.6 orders, £5,425 spend'},
+    3: {'tier':'Ultra VIP','desc':'Extreme high-value with massive order frequency','char':'8d recency, 38.9 orders, £40,942 spend'},
+    4: {'tier':'Gold Tier','desc':'Consistent champions with solid performance','char':'1d recency, 10.9 orders, £3,981 spend'},
+    6: {'tier':'Diamond Elite','desc':'Ultra frequent buyers with exceptional loyalty','char':'1d recency, 126.8 orders, £33,796 spend'}
+}
 
-        dbc.Tab(label="🎯 Growth Strategies",children=[html.Div([
-            html.Div(id='champ-detail'),
-            html.Div(id='st')
-        ],className="tab-content")]),
+def get_strat(cid, data):
+    cd = data[data['Cluster_KMeans'] == cid]
+    r, f, m = cd['Recency'].mean(), cd['Frequency'].mean(), cd['Monetary'].mean()
+    if r < 50 and f > 10 and m > 1000:
+        s = 'champions'
+    elif r < 50 and f > 5:
+        s = 'loyal'
+    elif m > 1500:
+        s = 'big'
+    elif r > 100:
+        s = 'dormant'
+    elif r < 50 and f < 5:
+        s = 'potential'
+    else:
+        s = 'standard'
+    return {**strats[s], 'cluster_id': cid}
 
-        dbc.Tab(label="💡 AI Insights",children=[html.Div(id='ins',className="tab-content")])
-    ]),
-],className="dash")])
+profs = {}
+for c in rfm['Cluster_KMeans'].unique():
+    p = get_strat(c, rfm)
+    profs[c] = p
+    rfm.loc[rfm['Cluster_KMeans'] == c, 'Cluster_Label'] = f"{p['name'][:2]} {p['name'][2:]} (C{c})"
+    rfm.loc[rfm['Cluster_KMeans'] == c, 'Priority'] = p['priority']
 
-@app.callback([Output('g1','figure'),Output('g2','figure'),Output('g3','figure'),Output('g4','figure'),
-               Output('g5','figure'),Output('g6','figure'),Output('g7','figure'),Output('champ-detail','children'),
-               Output('st','children'),Output('ins','children')],
-              [Input('cf','value'),Input('rf','value'),Input('pf','value')])
-def upd(sc,rr,sp):
-    df=rfm[(rfm['RFM_Score']>=rr[0])&(rfm['RFM_Score']<=rr[1])]
-    if sc!='all':df=df[df['Cluster_KMeans']==sc]
-    if sp!='all':df=df[df['Priority']==sp]
+colors = {f"{p['name'][:2]} {p['name'][2:]} (C{c})": p['color'] for c, p in profs.items()}
 
+# Header
+st.markdown("""
+<div class="hdr">
+    <h1 class="title">🎯 Customer Intelligence Hub</h1>
+    <p class="sub">Customer Segmentation for Personalized Retail Marketing</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Metrics
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.markdown(f"""
+    <div class="met">
+        <div class="met-icon">👥</div>
+        <div class="met-val">{len(rfm):,}</div>
+        <div class="met-lbl">Customers</div>
+        <div class="met-sub">Active Database</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown(f"""
+    <div class="met">
+        <div class="met-icon">🎯</div>
+        <div class="met-val">{rfm['Cluster_KMeans'].nunique()}</div>
+        <div class="met-lbl">Segments</div>
+        <div class="met-sub">AI-Classified</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col3:
+    st.markdown(f"""
+    <div class="met">
+        <div class="met-icon">💰</div>
+        <div class="met-val">£{rfm['Monetary'].sum()/1e6:.2f}M</div>
+        <div class="met-lbl">Revenue</div>
+        <div class="met-sub">Avg £{rfm['Monetary'].mean():.0f}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col4:
+    st.markdown(f"""
+    <div class="met">
+        <div class="met-icon">📈</div>
+        <div class="met-val">£{rfm['AvgOrderValue'].mean():.0f}</div>
+        <div class="met-lbl">Avg Order</div>
+        <div class="met-sub">Peak £{rfm['AvgOrderValue'].max():.0f}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Filters
+st.markdown('<div class="filt">', unsafe_allow_html=True)
+st.markdown('<div class="filt-t">🎛️ Smart Filters</div>', unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    # Buat opsi untuk segment filter
+    cluster_options = ['all'] + list(profs.keys())
+    
+    # Buat mapping untuk display names
+    def get_cluster_display_name(cluster_id):
+        if cluster_id == 'all':
+            return '🌐 All Segments'
+        else:
+            p = profs[cluster_id]
+            if p['name'] == '🏆 Champions' and cluster_id in champion_details:
+                return f"{p['name']} - {champion_details[cluster_id]['tier']}"
+            else:
+                return p['name']
+    
+    selected_cluster = st.selectbox(
+        "🎨 Segment Filter",
+        options=cluster_options,
+        format_func=get_cluster_display_name
+    )
+
+with col2:
+    min_rfm = int(rfm['RFM_Score'].min())
+    max_rfm = int(rfm['RFM_Score'].max())
+    rfm_range = st.slider(
+        "📊 RFM Score Range",
+        min_value=min_rfm,
+        max_value=max_rfm,
+        value=(min_rfm, max_rfm),
+        step=1
+    )
+
+with col3:
+    # Priority options
+    priority_options = {
+        'all': '🌐 All Priorities',
+        'CRITICAL': '🔴 CRITICAL',
+        'URGENT': '🔥 URGENT',
+        'HIGH': '⚡ HIGH',
+        'MEDIUM': '📊 MEDIUM'
+    }
+    
+    selected_priority = st.selectbox(
+        "🔥 Priority Level",
+        options=list(priority_options.keys()),
+        format_func=lambda x: priority_options[x]
+    )
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Apply filters
+filtered_df = rfm[(rfm['RFM_Score'] >= rfm_range[0]) & (rfm['RFM_Score'] <= rfm_range[1])]
+if selected_cluster != 'all':
+    filtered_df = filtered_df[filtered_df['Cluster_KMeans'] == selected_cluster]
+if selected_priority != 'all':
+    filtered_df = filtered_df[filtered_df['Priority'] == selected_priority]
+
+# Tabs
+tab1, tab2, tab3 = st.tabs(["📊 Analytics Dashboard", "🎯 Growth Strategies", "💡 AI Insights"])
+
+with tab1:
+    st.markdown('<div class="tab-content">', unsafe_allow_html=True)
+    
     # Chart 1: Customer Distribution Pie
-    cc=df['Cluster_Label'].value_counts()
-    f1=go.Figure(go.Pie(labels=cc.index,values=cc.values,hole=.68,
-        marker=dict(colors=[colors.get(l,'#95A5A6') for l in cc.index],
-                   line=dict(color='white',width=5)),
-        textfont=dict(size=14,family='Inter, Poppins',weight=700),
+    cluster_counts = filtered_df['Cluster_Label'].value_counts()
+    fig1 = go.Figure(go.Pie(
+        labels=cluster_counts.index,
+        values=cluster_counts.values,
+        hole=.68,
+        marker=dict(colors=[colors.get(l, '#95A5A6') for l in cluster_counts.index],
+                   line=dict(color='white', width=5)),
+        textfont=dict(size=14, family='Inter, Poppins', weight=700),
         textposition='outside',
-        pull=[0.05]*len(cc)))
-    f1.update_layout(title={'text':"<b>🎯 Customer Distribution</b>",'x':.5,'font':{'size':20,'family':'Inter, Poppins','color':'#2c3e50'}},
+        pull=[0.05] * len(cluster_counts)
+    ))
+    fig1.update_layout(
+        title={'text': "<b>🎯 Customer Distribution</b>", 'x': .5, 
+               'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
         height=420,
-        annotations=[dict(text=f'<b>{len(df):,}</b><br><span style="font-size:14px">Customers</span>',
-                         x=.5,y=.5,font={'size':24,'color':'#667eea','family':'Inter, Poppins'},showarrow=False)],
-        margin=dict(t=80,b=40,l=40,r=40))
-
+        annotations=[dict(text=f'<b>{len(filtered_df):,}</b><br><span style="font-size:14px">Customers</span>',
+                         x=.5, y=.5, font={'size': 24, 'color': '#667eea', 'family': 'Inter, Poppins'}, 
+                         showarrow=False)],
+        margin=dict(t=80, b=40, l=40, r=40)
+    )
+    
     # Chart 2: Revenue by Segment
-    rv=df.groupby('Cluster_Label')['Monetary'].sum().sort_values()
-    f2=go.Figure(go.Bar(x=rv.values,y=rv.index,orientation='h',
-        marker=dict(color=rv.values,colorscale='Sunset',
-                   line=dict(color='white',width=3)),
-        text=[f'£{v/1000:.1f}K' for v in rv.values],
+    revenue_by_segment = filtered_df.groupby('Cluster_Label')['Monetary'].sum().sort_values()
+    fig2 = go.Figure(go.Bar(
+        x=revenue_by_segment.values,
+        y=revenue_by_segment.index,
+        orientation='h',
+        marker=dict(color=revenue_by_segment.values, colorscale='Sunset',
+                   line=dict(color='white', width=3)),
+        text=[f'£{v/1000:.1f}K' for v in revenue_by_segment.values],
         textposition='outside',
-        textfont={'size':13,'weight':700,'family':'Inter, Poppins'}))
-    f2.update_layout(title={'text':"<b>💰 Revenue by Segment</b>",'x':.5,'font':{'size':20,'family':'Inter, Poppins','color':'#2c3e50'}},
-        xaxis={'title':'<b>Revenue (£)</b>','titlefont':{'size':14,'family':'Inter, Poppins'},'gridcolor':'rgba(0,0,0,0.05)'},
-        yaxis={'titlefont':{'size':14,'family':'Inter, Poppins'}},
+        textfont={'size': 13, 'weight': 700, 'family': 'Inter, Poppins'}
+    ))
+    fig2.update_layout(
+        title={'text': "<b>💰 Revenue by Segment</b>", 'x': .5, 
+               'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
+        xaxis={'title': '<b>Revenue (£)</b>', 'titlefont': {'size': 14, 'family': 'Inter, Poppins'}, 
+               'gridcolor': 'rgba(0,0,0,0.05)'},
+        yaxis={'titlefont': {'size': 14, 'family': 'Inter, Poppins'}},
         height=420,
         plot_bgcolor='rgba(245,247,250,.6)',
-        margin=dict(t=80,b=60,l=140,r=60))
-
+        margin=dict(t=80, b=60, l=140, r=60)
+    )
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(fig1, use_container_width=True, config={'displayModeBar': False})
+    with col2:
+        st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
+    
     # Chart 3: 3D RFM Analysis
-    f3=go.Figure(go.Scatter3d(x=df['Recency'],y=df['Frequency'],z=df['Monetary'],mode='markers',
-        marker=dict(size=7,color=df['Cluster_KMeans'],colorscale='Rainbow',showscale=True,
-                   line=dict(width=.8,color='white'),opacity=.88,
-                   colorbar=dict(title='Cluster',thickness=20,len=0.7)),
-        text=df['Cluster_Label'],
-        hovertemplate='<b>%{text}</b><br>Recency: %{x}<br>Frequency: %{y}<br>Monetary: £%{z:,.0f}<extra></extra>'))
-    f3.update_layout(title={'text':"<b>📈 3D RFM Customer Analysis</b>",'x':.5,'font':{'size':20,'family':'Inter, Poppins','color':'#2c3e50'}},
+    fig3 = go.Figure(go.Scatter3d(
+        x=filtered_df['Recency'],
+        y=filtered_df['Frequency'],
+        z=filtered_df['Monetary'],
+        mode='markers',
+        marker=dict(size=7, color=filtered_df['Cluster_KMeans'], colorscale='Rainbow', 
+                   showscale=True, line=dict(width=.8, color='white'), opacity=.88,
+                   colorbar=dict(title='Cluster', thickness=20, len=0.7)),
+        text=filtered_df['Cluster_Label'],
+        hovertemplate='<b>%{text}</b><br>Recency: %{x}<br>Frequency: %{y}<br>Monetary: £%{z:,.0f}<extra></extra>'
+    ))
+    fig3.update_layout(
+        title={'text': "<b>📈 3D RFM Customer Analysis</b>", 'x': .5, 
+               'font': {'size': 20, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
         height=650,
-        scene=dict(xaxis=dict(title='<b>Recency (days)</b>',backgroundcolor='rgba(245,247,250,.4)',gridcolor='rgba(0,0,0,0.08)'),
-                  yaxis=dict(title='<b>Frequency</b>',backgroundcolor='rgba(245,247,250,.4)',gridcolor='rgba(0,0,0,0.08)'),
-                  zaxis=dict(title='<b>Monetary (£)</b>',backgroundcolor='rgba(245,247,250,.4)',gridcolor='rgba(0,0,0,0.08)'),
-                  camera=dict(eye=dict(x=1.5,y=1.5,z=1.3))),
+        scene=dict(
+            xaxis=dict(title='<b>Recency (days)</b>', backgroundcolor='rgba(245,247,250,.4)', 
+                      gridcolor='rgba(0,0,0,0.08)'),
+            yaxis=dict(title='<b>Frequency</b>', backgroundcolor='rgba(245,247,250,.4)', 
+                      gridcolor='rgba(0,0,0,0.08)'),
+            zaxis=dict(title='<b>Monetary (£)</b>', backgroundcolor='rgba(245,247,250,.4)', 
+                      gridcolor='rgba(0,0,0,0.08)'),
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.3))
+        ),
         paper_bgcolor='rgba(245,247,250,.4)',
-        margin=dict(t=80,b=40,l=40,r=40))
-
-    # Charts 4-6: Histograms
-    def mh(d,col,ttl,clr):
-        fig=go.Figure(go.Histogram(x=d[col],nbinsx=35,
-            marker=dict(color=clr,line=dict(color='white',width=2),opacity=.85)))
-        fig.update_layout(title={'text':f"<b>{ttl}</b>",'x':.5,'font':{'size':18,'family':'Inter, Poppins','color':'#2c3e50'}},
-            xaxis={'title':f'<b>{col}</b>','titlefont':{'size':13,'family':'Inter, Poppins'},'gridcolor':'rgba(0,0,0,0.05)'},
-            yaxis={'title':'<b>Count</b>','titlefont':{'size':13,'family':'Inter, Poppins'},'gridcolor':'rgba(0,0,0,0.05)'},
+        margin=dict(t=80, b=40, l=40, r=40)
+    )
+    st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
+    
+    # Histograms
+    def create_histogram(data, column, title, color):
+        fig = go.Figure(go.Histogram(
+            x=data[column], nbinsx=35,
+            marker=dict(color=color, line=dict(color='white', width=2), opacity=.85)
+        ))
+        fig.update_layout(
+            title={'text': f"<b>{title}</b>", 'x': .5, 
+                   'font': {'size': 18, 'family': 'Inter, Poppins', 'color': '#2c3e50'}},
+            xaxis={'title': f'<b>{column}</b>', 'titlefont': {'size': 13, 'family': 'Inter, Poppins'}, 
+                   'gridcolor': 'rgba(0,0,0,0.05)'},
+            yaxis={'title': '<b>Count</b>', 'titlefont': {'size': 13, 'family': 'Inter, Poppins'}, 
+                   'gridcolor': 'rgba(0,0,0,0.05)'},
             height=340,
             plot_bgcolor='rgba(245,247,250,.5)',
-            margin=dict(t=70,b=50,l=60,r=40))
+            margin=dict(t=70, b=50, l=60, r=40)
+        )
         return fig
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        fig4 = create_histogram(filtered_df, 'Recency', '⏰ Recency Distribution', '#ff6b6b')
+        st.plotly_chart(fig4, use_container_width=True, config={'displayModeBar': False})
+    with col2:
+        fig5 = create_histogram(filtered_df, 'Frequency', '🔄 Frequency Distribution', '#4ecdc4')
+        st.plotly_chart(fig5, use_container_width=True, config={'displayModeBar': False})
+    with col3:
+        fig6 = create_histogram(filtered_df, 'Monetary', '💵 Monetary Distribution', '#45b7d1')
+        st.plotly_chart(fig6, use_container_width=True, config={'displayModeBar': False})
+    
+    # Segment Summary Table
+    summary_table = filtered_df.groupby('Cluster_Label').agg({
+        'Recency': 'mean', 'Frequency': 'mean', 'Monetary': 'mean', 
+        'AvgOrderValue': 'mean', 'RFM_Score': 'mean'
+    }).round(1).reset_index()
+    summary_table['Count'] = filtered_df.groupby('Cluster_Label').size().values
+    
+    fig7 = go.Figure(go.Table(
+        header=dict(
+            values=['<b>Segment</b>', '<b>Count</b>', '<b>Recency</b>', '<b>Frequency</b>',
+                   '<b>Monetary</b>', '<b>Avg Order</b>', '<b>RFM Score</b>'],
+            fill_color='#667eea',
+            font=dict(color='white', size=13, family='Inter, Poppins'),
+            align='center',
+            height=42,
+            line=dict(color='white', width=2)
+        ),
+        cells=dict(
+            values=[
+                summary_table['Cluster_Label'],
+                summary_table['Count'],
+                [f"{v:.0f}d" for v in summary_table['Recency']],
+                summary_table['Frequency'].round(1),
+                [f"£{v:,.0f}" for v in summary_table['Monetary']],
+                [f"£{v:.0f}" for v in summary_table['AvgOrderValue']],
+                summary_table['RFM_Score']
+            ],
+            fill_color=[['white', '#f8f9fc'] * len(summary_table)],
+            align='center',
+            font={'size': 12, 'family': 'Inter, Poppins'},
+            height=38,
+            line=dict(color='#e0e0e0', width=1)
+        )
+    ))
+    fig7.update_layout(height=380, margin=dict(t=20, b=20, l=20, r=20))
+    st.plotly_chart(fig7, use_container_width=True, config={'displayModeBar': False})
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    f4=mh(df,'Recency','⏰ Recency Distribution','#ff6b6b')
-    f5=mh(df,'Frequency','🔄 Frequency Distribution','#4ecdc4')
-    f6=mh(df,'Monetary','💵 Monetary Distribution','#45b7d1')
-
-    # Chart 7: Segment Summary Table
-    tb=df.groupby('Cluster_Label').agg({'Recency':'mean','Frequency':'mean','Monetary':'mean','AvgOrderValue':'mean','RFM_Score':'mean'}).round(1).reset_index()
-    tb['Count']=df.groupby('Cluster_Label').size().values
-
-    f7=go.Figure(go.Table(
-        header=dict(values=['<b>Segment</b>','<b>Count</b>','<b>Recency</b>','<b>Frequency</b>',
-                           '<b>Monetary</b>','<b>Avg Order</b>','<b>RFM Score</b>'],
-                   fill_color='#667eea',
-                   font=dict(color='white',size=13,family='Inter, Poppins'),
-                   align='center',
-                   height=42,
-                   line=dict(color='white',width=2)),
-        cells=dict(values=[tb['Cluster_Label'],
-                          tb['Count'],
-                          [f"{v:.0f}d" for v in tb['Recency']],
-                          tb['Frequency'].round(1),
-                          [f"£{v:,.0f}" for v in tb['Monetary']],
-                          [f"£{v:.0f}" for v in tb['AvgOrderValue']],
-                          tb['RFM_Score']],
-                  fill_color=[['white','#f8f9fc']*len(tb)],
-                  align='center',
-                  font={'size':12,'family':'Inter, Poppins'},
-                  height=38,
-                  line=dict(color='#e0e0e0',width=1))))
-    f7.update_layout(height=380,margin=dict(t=20,b=20,l=20,r=20))
-
+with tab2:
+    st.markdown('<div class="tab-content">', unsafe_allow_html=True)
+    
     # Champion Breakdown Section
-    champion_clusters = [c for c in df['Cluster_KMeans'].unique() if profs[c]['name'] == '🏆 Champions']
-    champ_breakdown = None
-
+    champion_clusters = [c for c in filtered_df['Cluster_KMeans'].unique() 
+                        if profs[c]['name'] == '🏆 Champions']
+    
     if len(champion_clusters) > 0:
         champ_cards = []
         for cid in sorted(champion_clusters):
             if cid in champion_details:
                 det = champion_details[cid]
-                champ_cards.append(html.Div([
-                    html.Div(f"Champion C{cid}",className="champ-num"),
-                    html.Div(f"🏅 {det['tier']}",className="champ-tier"),
-                    html.Div(det['desc'],className="champ-desc"),
-                    html.Div(f"📊 Characteristics: {det['char']}",className="champ-char")
-                ],className="champ-card"))
-
+                champ_cards.append(f"""
+                <div class="champ-card">
+                    <div class="champ-num">Champion C{cid}</div>
+                    <div class="champ-tier">🏅 {det['tier']}</div>
+                    <div class="champ-desc">{det['desc']}</div>
+                    <div class="champ-char">📊 Characteristics: {det['char']}</div>
+                </div>
+                """)
+        
         if champ_cards:
-            champ_breakdown = html.Div([
-                html.Div("🏆 Champion Segments Breakdown",className="champ-break-t"),
-                html.Div("Understanding the 4 Different Champion Tiers",
-                        style={'textAlign':'center','fontSize':'1.1rem','marginBottom':'24px','opacity':'0.95'}),
-                html.Div(champ_cards,className="champ-grid")
-            ],className="champ-break")
-
+            st.markdown("""
+            <div class="champ-break">
+                <div class="champ-break-t">🏆 Champion Segments Breakdown</div>
+                <div style="text-align:center;font-size:1.1rem;margin-bottom:24px;opacity:0.95">
+                    Understanding the 4 Different Champion Tiers
+                </div>
+                <div class="champ-grid">
+            """ + "".join(champ_cards) + """
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
     # Strategy Cards
-    st_cards=[]
-    for cid,p in profs.items():
-        if sc=='all' or sc==cid:
-            st_cards.append(html.Div([
-                html.Div([
-                    html.Div(p['name'],className="strat-name"),
-                    html.Div(p['priority'],className="pri-badge")
-                ],className="strat-hdr"),
-                html.Div(f"📋 {p['strategy']} Strategy",className="strat-sub"),
-                html.Div([
-                    html.Div("🎯 Key Tactics",className="tact-t"),
-                    *[html.Div(t,className="tact") for t in p['tactics']]
-                ],className="tactics"),
-                html.Div([
-                    html.Div("📊 Target KPIs",className="tact-t"),
-                    html.Div([html.Div(k,className="kpi") for k in p['kpis']],className="kpi-g")
-                ],className="tactics"),
-                html.Div([
-                    html.Div([
-                        html.Div("Budget Allocation",className="budget-l"),
-                        html.Div(p['budget'],className="budget-v")
-                    ]),
-                    html.Div([
-                        html.Div("ROI Target",className="budget-l"),
-                        html.Div(p['roi'],className="budget-v")
-                    ])
-                ],className="budget")
-            ],className="strat",style={'background':p['grad']}))
+    strategy_cards = []
+    for cid, p in profs.items():
+        if selected_cluster == 'all' or selected_cluster == cid:
+            strategy_cards.append(f"""
+            <div class="strat" style="background:{p['grad']}">
+                <div class="strat-hdr">
+                    <div class="strat-name">{p['name']}</div>
+                    <div class="pri-badge">{p['priority']}</div>
+                </div>
+                <div class="strat-sub">📋 {p['strategy']} Strategy</div>
+                <div class="tactics">
+                    <div class="tact-t">🎯 Key Tactics</div>
+                    {"".join([f'<div class="tact">{t}</div>' for t in p['tactics']])}
+                </div>
+                <div class="tactics">
+                    <div class="tact-t">📊 Target KPIs</div>
+                    <div class="kpi-g">
+                        {"".join([f'<div class="kpi">{k}</div>' for k in p['kpis']])}
+                    </div>
+                </div>
+                <div class="budget">
+                    <div>
+                        <div class="budget-l">Budget Allocation</div>
+                        <div class="budget-v">{p['budget']}</div>
+                    </div>
+                    <div>
+                        <div class="budget-l">ROI Target</div>
+                        <div class="budget-v">{p['roi']}</div>
+                    </div>
+                </div>
+            </div>
+            """)
+    
+    st.markdown(f'<div class="strat-g">{"".join(strategy_cards)}</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
+with tab3:
+    st.markdown('<div class="tab-content">', unsafe_allow_html=True)
+    
     # Insights
-    ins_cont=html.Div([
-        html.Div("🧠 AI-Powered Insights & Recommendations",className="ins-t"),
-        html.Div([
-            html.Div([
-                html.Div("📊 Top Performers",className="ins-h"),
-                html.Ul([
-                    html.Li(f"🏆 Highest Revenue: {df.groupby('Cluster_Label')['Monetary'].sum().idxmax()}"),
-                    html.Li(f"👥 Largest Group: {df['Cluster_Label'].value_counts().idxmax()} ({df['Cluster_Label'].value_counts().max():,} customers)"),
-                    html.Li(f"💰 Best AOV: {df.groupby('Cluster_Label')['AvgOrderValue'].mean().idxmax()} (£{df.groupby('Cluster_Label')['AvgOrderValue'].mean().max():.0f})"),
-                    html.Li(f"🔄 Most Frequent: {df.groupby('Cluster_Label')['Frequency'].mean().idxmax()} ({df.groupby('Cluster_Label')['Frequency'].mean().max():.1f} orders)")
-                ],className="ins-list")
-            ],className="ins-card"),
-            html.Div([
-                html.Div("💡 Smart Recommendations",className="ins-h"),
-                html.Ul([
-                    html.Li("🎯 Prioritize high-value segment retention programs"),
-                    html.Li("📧 Launch win-back campaigns for dormant customers"),
-                    html.Li("🚀 Accelerate potential customer nurturing flows"),
-                    html.Li("💎 Create exclusive VIP experiences for champions"),
-                    html.Li("📈 Implement cross-sell strategies for loyal segments")
-                ],className="ins-list")
-            ],className="ins-card")
-        ],className="ins-g")
-    ],className="ins")
+    insights_content = f"""
+    <div class="ins">
+        <div class="ins-t">🧠 AI-Powered Insights & Recommendations</div>
+        <div class="ins-g">
+            <div class="ins-card">
+                <div class="ins-h">📊 Top Performers</div>
+                <ul class="ins-list">
+                    <li>🏆 Highest Revenue: {filtered_df.groupby('Cluster_Label')['Monetary'].sum().idxmax() if len(filtered_df) > 0 else 'N/A'}</li>
+                    <li>👥 Largest Group: {filtered_df['Cluster_Label'].value_counts().idxmax() if len(filtered_df) > 0 else 'N/A'} ({filtered_df['Cluster_Label'].value_counts().max() if len(filtered_df) > 0 else 0:,} customers)</li>
+                    <li>💰 Best AOV: {filtered_df.groupby('Cluster_Label')['AvgOrderValue'].mean().idxmax() if len(filtered_df) > 0 else 'N/A'} (£{filtered_df.groupby('Cluster_Label')['AvgOrderValue'].mean().max() if len(filtered_df) > 0 else 0:.0f})</li>
+                    <li>🔄 Most Frequent: {filtered_df.groupby('Cluster_Label')['Frequency'].mean().idxmax() if len(filtered_df) > 0 else 'N/A'} ({filtered_df.groupby('Cluster_Label')['Frequency'].mean().max() if len(filtered_df) > 0 else 0:.1f} orders)</li>
+                </ul>
+            </div>
+            <div class="ins-card">
+                <div class="ins-h">💡 Smart Recommendations</div>
+                <ul class="ins-list">
+                    <li>🎯 Prioritize high-value segment retention programs</li>
+                    <li>📧 Launch win-back campaigns for dormant customers</li>
+                    <li>🚀 Accelerate potential customer nurturing flows</li>
+                    <li>💎 Create exclusive VIP experiences for champions</li>
+                    <li>📈 Implement cross-sell strategies for loyal segments</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(insights_content, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    return f1,f2,f3,f4,f5,f6,f7,champ_breakdown,html.Div(st_cards,className="strat-g"),ins_cont
-
-# Setup and Run untuk Railway
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8050))
-    print(f"\n{'='*85}\n🚀 DASHBOARD IS STARTING ON PORT: {port}\n{'='*85}\n")
-    app.run(host='0.0.0.0', port=port, debug=False)
+# Footer
+st.markdown("""
+<div style="text-align:center;margin-top:50px;padding:26px;border-top:4px solid #667eea;color:#7f8c8d;font-size:1.05rem;font-weight:600;letter-spacing:0.5px">
+    Customer Intelligence Hub v1.0 • Powered by Streamlit & Plotly
+</div>
+""", unsafe_allow_html=True)
